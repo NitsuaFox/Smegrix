@@ -23,6 +23,7 @@ class DateWidget(BaseWidget):
         """Returns the current date formatted based on the selected type."""
         now = self.global_context.get('now')
         if not now or not isinstance(now, datetime.datetime):
+            # Potentially use self._log here if we want to log missing 'now' in context
             return "--/--"
         
         # Get the actual strftime format string from our map
@@ -31,7 +32,8 @@ class DateWidget(BaseWidget):
 
     @staticmethod
     def get_config_options() -> list:
-        return [
+        options = BaseWidget.get_config_options() # Get base options including 'enable_logging'
+        options.extend([
             {
                 'name': 'date_format_type',
                 'label': 'Date Format',
@@ -52,10 +54,12 @@ class DateWidget(BaseWidget):
                 'default': 'medium',
                 'options': [
                     {'value': 'small', 'label': 'Small (3x5)'},
-                    {'value': 'medium', 'label': 'Medium (5x7)'}
-                    # Add other sizes if desired for DateWidget in the future
+                    {'value': 'medium', 'label': 'Medium (5x7)'},
+                    {'value': 'large', 'label': 'Large (7x9)'},
+                    {'value': 'xl', 'label': 'Extra Large (9x13)'}
                 ]
             }
             # The old free-text 'date_format' can be removed or deprecated if desired
             # For now, let's remove it to avoid confusion.
-        ] 
+        ]) 
+        return options 

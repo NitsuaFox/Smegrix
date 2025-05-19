@@ -9,6 +9,7 @@ import importlib
 import inspect
 import time
 import threading # For background updates
+import logging # Added for custom log filter
 
 # Import BaseWidget to check instance types, though specific widgets are loaded dynamically
 from widgets.base_widget import BaseWidget 
@@ -34,6 +35,25 @@ active_widget_instances = {} # Stores active widget instances: widget_id -> inst
 data_lock = threading.Lock()
 
 DISPLAY_UPDATE_INTERVAL = 1 # seconds
+MATRIX_DATA_LOGGING_ENABLED = True # Global flag for matrix_data route logging
+current_frame_widget_dimensions = [] # Stores dimensions of widgets in the current frame
+
+# Custom Log Filter for /api/matrix_data
+class MatrixDataLogFilter(logging.Filter):
+    def filter(self, record):
+        # Check if the log message is for the /api/matrix_data endpoint
+        # and if logging for this endpoint is globally disabled.
+        # record.args is usually where the request details are for Werkzeug.
+        # A common format is: "GET /api/matrix_data HTTP/1.1" 200 -
+        is_matrix_data_req = False
+        if isinstance(record.args, tuple) and len(record.args) > 0:
+            request_line = str(record.args[0]) # e.g. "GET /api/matrix_data HTTP/1.1"
+            if "/api/matrix_data" in request_line:
+                is_matrix_data_req = True
+
+        if is_matrix_data_req and not MATRIX_DATA_LOGGING_ENABLED:
+            return 0  # Suppress log record
+        return 1  # Allow log record
 
 def load_widget_classes():
     """Dynamically loads widget classes from the 'widgets' directory."""
@@ -313,11 +333,14 @@ def set_display_mode_route(mode_name):
         return jsonify(success=False, message=f"Invalid display mode: {mode_name}"), 400
 
 def update_display_content(): 
-    global active_widget_instances # Ensure we're using the global cache
+    global active_widget_instances, current_frame_widget_dimensions # Ensure we're using the global cache & dimensions list
     with data_lock: # Ensure exclusive access to shared resources
         matrix_display.clear() 
         now = datetime.datetime.now()
         
+        # Clear dimensions from previous frame
+        new_dimensions_this_frame = []
+
         current_screen_config = screen_layouts.get(current_display_mode)
         if not current_screen_config:
             print(f"Warning: Screen '{current_display_mode}' not found in screen_layouts. Cannot update display.")
@@ -391,22 +414,63 @@ def update_display_content():
                             if instance.font_size == 'small': font_name_to_pass = '3x5'
                             elif instance.font_size == 'medium': font_name_to_pass = '5x7'
                             elif instance.font_size == 'large': font_name_to_pass = '7x9'
-                            elif instance.font_size == 'xl': font_name_to_pass = 'xl'
+                            elif instance.font_size == 'xl': font_name_to_pass = 'xl' # Uses 9x13 in display.py
+                        
+                        # Calculate and store dimensions
+                        try:
+                            width_cells, height_cells = matrix_display.get_text_dimensions(content, font_name_to_pass)
+                            new_dimensions_this_frame.append({
+                                'id': widget_id,
+                                'width_cells': width_cells,
+                                'height_cells': height_cells
+                            })
+                        except Exception as dim_error:
+                            print(f"Error calculating dimensions for widget {widget_id}: {dim_error}")
+                            # Add with default/fallback dimensions if calculation fails
+                            new_dimensions_this_frame.append({
+                                'id': widget_id,
+                                'width_cells': 5, # Fallback width
+                                'height_cells': 7  # Fallback height (e.g. for 5x7 font)
+                            })
+
                         matrix_display.draw_text(content, instance.x, instance.y, color_tuple=rgb_color_tuple, font_name=font_name_to_pass)
                 except Exception as e:
                     print(f"Error processing widget '{widget_config.get('id', widget_type)}': {e}")
             else:
                 print(f"Warning: Widget type '{widget_type}' not found in AVAILABLE_WIDGETS.")
+        
+        # Update the global dimensions list for the current frame
+        current_frame_widget_dimensions = new_dimensions_this_frame
 
 @app.route('/api/matrix_data')
 def get_matrix_data_route(): 
-    with data_lock: # Ensure we read a consistent buffer
+    global current_frame_widget_dimensions # Access the global list
+    with data_lock: # Ensure we read a consistent buffer and dimensions list
         pixels = matrix_display.get_buffer()
         mode = current_display_mode
+        # Make a copy of the dimensions to avoid issues if it's modified during jsonify
+        dimensions_to_send = list(current_frame_widget_dimensions) 
     return jsonify({
         "pixels": pixels,
-        "current_display_mode": mode
+        "current_display_mode": mode,
+        "widgets_dimensions": dimensions_to_send
     })
+
+@app.route('/api/get_matrix_logging_status', methods=['GET'])
+def get_matrix_logging_status():
+    global MATRIX_DATA_LOGGING_ENABLED
+    return jsonify(enabled=MATRIX_DATA_LOGGING_ENABLED)
+
+@app.route('/api/set_matrix_logging_status', methods=['POST'])
+def set_matrix_logging_status():
+    global MATRIX_DATA_LOGGING_ENABLED
+    data = request.get_json()
+    if data is None or 'enabled' not in data or not isinstance(data['enabled'], bool):
+        return jsonify(success=False, message="Invalid request. 'enabled' (boolean) is required."), 400
+    
+    MATRIX_DATA_LOGGING_ENABLED = data['enabled']
+    print(f"Matrix data route logging set to: {MATRIX_DATA_LOGGING_ENABLED}") # General app log
+    return jsonify(success=True, enabled=MATRIX_DATA_LOGGING_ENABLED)
 
 def periodic_display_updater():
     """Periodically calls update_display_content in a background thread."""
@@ -427,6 +491,24 @@ if __name__ == '__main__':
     active_widget_instances.clear() # Ensure instances are fresh after initial load
     print("Cleared active_widget_instances after initial load_screen_layouts.")
     
+    # Add custom log filter to Werkzeug logger to control /api/matrix_data logs
+    werkzeug_logger = logging.getLogger('werkzeug')
+    if werkzeug_logger:
+        # Check if the filter is already added to prevent duplicates during reloads with Flask debug mode
+        already_added = False
+        for f in werkzeug_logger.filters:
+            if isinstance(f, MatrixDataLogFilter):
+                already_added = True
+                break
+        if not already_added:
+            werkzeug_logger.addFilter(MatrixDataLogFilter())
+            print("MatrixDataLogFilter added to Werkzeug logger.")
+        else:
+            print("MatrixDataLogFilter already present in Werkzeug logger.")
+
+    else:
+        print("Warning: Could not get Werkzeug logger to add MatrixDataLogFilter.")
+
     # Start the background thread for display updates
     update_thread = threading.Thread(target=periodic_display_updater, daemon=True)
     update_thread.start()

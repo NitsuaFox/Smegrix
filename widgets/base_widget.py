@@ -5,6 +5,8 @@ class BaseWidget(ABC):
     Abstract base class for all widgets.
     Defines the common interface for widgets.
     """
+    DEFAULT_ENABLE_LOGGING = True # Default for all widgets
+
     def __init__(self, config: dict, global_context: dict = None):
         """
         Initialize the widget.
@@ -22,8 +24,17 @@ class BaseWidget(ABC):
         self.y = config.get('y', 0)
         self.enabled = config.get('enabled', True)
         self.color = config.get('color', '#FFFFFF') # Default to white hex string
+        
+        # Logging configuration
+        self.enable_logging = config.get('enable_logging', self.DEFAULT_ENABLE_LOGGING)
+
         self.config = config # Store the full config for widget-specific use
         self.global_context = global_context if global_context is not None else {}
+
+    def _log(self, level: str, message: str):
+        """Helper method for logging. Prints if self.enable_logging is True."""
+        if self.enable_logging:
+            print(f"[{self.__class__.__name__}-{self.widget_id}] {level.upper()}: {message}")
 
     @abstractmethod
     def get_content(self) -> str:
@@ -48,9 +59,16 @@ class BaseWidget(ABC):
             {'name': 'update_interval', 'label': 'Update Interval (s)', 'type': 'number', 'default': 60}
         ]
         This helps the config UI to dynamically generate input fields.
-        Base implementation returns an empty list, meaning no special config options beyond the standard ones.
+        Base implementation includes the enable_logging option.
         """
-        return []
+        return [
+            {
+                'name': 'enable_logging',
+                'label': 'Enable Terminal Logging',
+                'type': 'checkbox',
+                'default': BaseWidget.DEFAULT_ENABLE_LOGGING
+            }
+        ]
 
     def __repr__(self):
         return f"{self.__class__.__name__}(id='{self.widget_id}', type='{self.widget_type}', color='{self.color}', enabled={self.enabled})" 

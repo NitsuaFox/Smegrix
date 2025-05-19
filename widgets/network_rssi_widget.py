@@ -7,4 +7,9 @@ class NetworkRSSIWidget(BaseWidget):
         """Returns the RSSI from the global context."""
         return str(self.global_context.get('rssi', "N/A")) # Ensure it's a string
 
+    @staticmethod
+    def get_config_options() -> list:
+        options = BaseWidget.get_config_options()
+        return options
+
     # No specific config options beyond base 

@@ -20,7 +20,8 @@ class TextWidget(BaseWidget):
         if we ensure it's saved as part of the widget's instance data.
         However, explicitly defining it here makes it discoverable by the config UI.
         """
-        return [
+        options = BaseWidget.get_config_options() # Get base options including 'enable_logging'
+        options.extend([
             {
                 'name': 'text', # This key must match the key used in self.config.get('text', '')
                 'label': 'Display Text',
@@ -28,4 +29,5 @@ class TextWidget(BaseWidget):
                 'default': 'Hello!',
                 'placeholder': 'Enter text to display'
             }
-        ] 
+        ])
+        return options 

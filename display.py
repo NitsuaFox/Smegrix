@@ -89,9 +89,35 @@ FONT_3X5 = {
 
 # Larger font: 7x9 (Width x Height) - for "Large" size
 FONT_7X9 = {
-    ' ': [0, 0, 0, 0, 0, 0, 0, 0, 0], # 7 bits wide, 9 rows high
-    '0': [62, 65, 97, 97, 97, 97, 65, 65, 62],  # 0111110, 1000001, 1100001, ...
-    '1': [16, 48, 16, 16, 16, 16, 16, 16, 62],  # 0010000, 0110000, ...
+    ' ': [0,0,0,0,0,0,0,0,0],
+    'A': [28, 34, 65, 65, 127, 65, 65, 65, 65], 
+    'B': [126, 65, 65, 126, 65, 65, 65, 65, 126],
+    'C': [62, 65, 64, 64, 64, 64, 64, 65, 62],  
+    'D': [126, 65, 65, 65, 65, 65, 65, 65, 126],
+    'E': [127, 64, 64, 124, 64, 64, 64, 64, 127],
+    'F': [127, 64, 64, 124, 64, 64, 64, 64, 64],
+    'G': [62, 65, 64, 64, 79, 65, 65, 65, 62],
+    'H': [65, 65, 65, 127, 65, 65, 65, 65, 65],
+    'I': [62, 16, 16, 16, 16, 16, 16, 16, 62],
+    'J': [2, 2, 2, 2, 2, 2, 66, 66, 60],
+    'K': [65, 66, 68, 120, 68, 66, 65, 65, 65],
+    'L': [64, 64, 64, 64, 64, 64, 64, 64, 127],
+    'M': [65, 99, 85, 73, 65, 65, 65, 65, 65],
+    'N': [65, 97, 81, 73, 69, 67, 65, 65, 65],
+    'O': [62, 65, 65, 65, 65, 65, 65, 65, 62],
+    'P': [126, 65, 65, 126, 64, 64, 64, 64, 64],
+    'Q': [62, 65, 65, 65, 65, 81, 73, 18, 60],
+    'R': [126, 65, 65, 126, 72, 68, 66, 65, 65],
+    'S': [62, 65, 64, 60, 2, 1, 65, 65, 62],
+    'T': [127, 16, 16, 16, 16, 16, 16, 16, 16],
+    'U': [65, 65, 65, 65, 65, 65, 65, 65, 62],
+    'V': [65, 65, 65, 65, 65, 65, 34, 28, 16],
+    'W': [65, 65, 65, 65, 73, 85, 99, 65, 65],
+    'X': [65, 65, 34, 28, 16, 28, 34, 65, 65],
+    'Y': [65, 65, 34, 28, 16, 16, 16, 16, 16],
+    'Z': [127, 1, 2, 4, 8, 16, 32, 64, 127],
+    '0': [62, 65, 97, 97, 97, 97, 65, 65, 62],
+    '1': [16, 48, 16, 16, 16, 16, 16, 16, 62],
     '2': [62, 65, 1, 1, 30, 48, 64, 64, 127],
     '3': [127, 1, 1, 62, 1, 1, 1, 65, 62],
     '4': [6, 14, 22, 38, 64, 127, 2, 2, 2],
@@ -100,12 +126,9 @@ FONT_7X9 = {
     '7': [127, 1, 1, 2, 4, 8, 16, 16, 16],
     '8': [62, 65, 65, 62, 65, 65, 65, 65, 62],
     '9': [62, 65, 65, 65, 126, 1, 1, 1, 62],
-    ':': [0, 0, 8, 0, 8, 0, 0, 0, 0] # Centered single-dot colon for 7x9 (col 3: 0001000)
+    ':': [0,0,0,0,16,0,16,0,0]
 }
-# For "XL", we'll reuse FONT_7X9 for now. A true XL font would be even bigger.
-FONT_XL = FONT_7X9 
 DEFAULT_CHAR_BITMAP_7X9 = [127, 65, 93, 93, 93, 65, 127,0,0] # Question mark for 7x9
-DEFAULT_CHAR_BITMAP_XL = DEFAULT_CHAR_BITMAP_7X9
 
 # Re-add missing default character bitmaps
 DEFAULT_CHAR_BITMAP_5X7 = [31, 17, 21, 21, 21, 17, 31] # '?' for 5x7
@@ -128,6 +151,10 @@ FONT_9X13 = {
 }
 DEFAULT_CHAR_BITMAP_9X13 = [511, 257, 377, 377, 345, 313, 257, 511,0,0,0,0,0] # Placeholder '?' for 9x13
 
+# For "XL", we'll use FONT_9X13 as it is the largest defined.
+FONT_XL = FONT_9X13 
+DEFAULT_CHAR_BITMAP_XL = DEFAULT_CHAR_BITMAP_9X13 # XL should use the 9x13 default character
+
 DEFAULT_BG_COLOR = (0, 0, 0) # Black
 DEFAULT_FG_COLOR = (255, 255, 255) # White
 
@@ -141,7 +168,7 @@ class Display:
             "5x7": {"data": FONT_5X7, "char_width": 5, "char_height": 7, "default_bitmap": DEFAULT_CHAR_BITMAP_5X7},
             "3x5": {"data": FONT_3X5, "char_width": 3, "char_height": 5, "default_bitmap": DEFAULT_CHAR_BITMAP_3X5},
             "7x9": {"data": FONT_7X9, "char_width": 7, "char_height": 9, "default_bitmap": DEFAULT_CHAR_BITMAP_7X9},
-            "xl":  {"data": FONT_XL,  "char_width": 9, "char_height": 13, "default_bitmap": DEFAULT_CHAR_BITMAP_XL} # XL uses 9x13 now
+            "xl":  {"data": FONT_XL,  "char_width": 9, "char_height": 13, "default_bitmap": DEFAULT_CHAR_BITMAP_XL} # XL uses 9x13 now via FONT_XL
         }
         self.default_font_name = "5x7" # Keep 5x7 as the default if no font is specified
 
@@ -203,6 +230,43 @@ class Display:
                         self.set_pixel(current_x + x_offset, current_y + y_offset, color_tuple)
             
             current_x += font_width + char_spacing
+
+    def get_text_dimensions(self, text_string, font_name=None):
+        """
+        Calculates the dimensions (width, height) of a text string if rendered with a given font.
+        Does not consider wrapping; calculates width as if on a single line.
+
+        Args:
+            text_string (str): The string to measure.
+            font_name (str, optional): The name of the font to use. Defaults to self.default_font_name.
+
+        Returns:
+            tuple: (width_in_cells, height_in_cells)
+        """
+        selected_font_name = font_name if font_name in self.fonts else self.default_font_name
+        font_info = self.fonts[selected_font_name]
+        
+        font_char_width = font_info["char_width"]
+        font_char_height = font_info["char_height"]
+        char_spacing = 1  # Standard spacing between characters used in draw_text
+
+        if not text_string:
+            return (0, font_char_height) # Height of one line, 0 width
+
+        num_chars = len(text_string)
+        
+        # Total width = (num_chars * char_width) + (max(0, num_chars - 1) * char_spacing)
+        # This assumes all characters in the specified font have the same 'char_width'.
+        # For proportionally spaced fonts, this would need to iterate and sum individual char widths.
+        # Given the current font structure, fixed width per font is assumed.
+        calculated_width = (num_chars * font_char_width)
+        if num_chars > 1:
+            calculated_width += (num_chars - 1) * char_spacing
+        
+        # Ensure minimum width of 1 cell if there's any character
+        calculated_width = max(1, calculated_width) if num_chars > 0 else 0
+
+        return (calculated_width, font_char_height)
 
     def get_buffer(self):
         """

@@ -1,0 +1,326 @@
+:root {
+    --bg-color: #1a1d21;
+    --primary-text-color: #e0e0e0;
+    --secondary-text-color: #abb2bf;
+    --accent-color: #00aeff; /* A new, brighter cyan/blue */
+    --panel-bg-color: #2c3038;
+    --panel-border-color: #40454f;
+    --button-bg-color: #3e444f;
+    --button-hover-bg-color: #505762;
+    --danger-color: #e74c3c;
+    --success-color: #2ecc71;
+    --font-stack: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+    --border-radius-sm: 4px;
+    --border-radius-md: 8px;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    background-color: var(--bg-color);
+    margin: 0;
+    padding: 20px; /* Add some padding around the page content */
+    font-family: var(--font-stack);
+    color: var(--primary-text-color);
+    box-sizing: border-box;
+}
+header {
+    width: 100%;
+    max-width: 800px; /* Constrain header width */
+    text-align: center;
+    margin-bottom: 30px; /* Increased spacing */
+}
+header h1 {
+    font-size: 2.5em; /* Larger font size */
+    color: #ffffff;
+    font-weight: 600; /* Semi-bold */
+    letter-spacing: 1px;
+    margin: 0; /* Remove default margin if any */
+    text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+/* Remove old nav.main-menu styles for now, will re-address later */
+/* nav.main-menu { ... } */
+nav.main-menu {
+    width: calc(64 * 10px + 2px); /* Match matrix width */
+    max-width: 90%;
+    background-color: var(--panel-bg-color);
+    padding: 15px; /* Consistent padding */
+    border-radius: var(--border-radius-md);
+    margin-top: 25px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    border: 1px solid var(--panel-border-color);
+    box-sizing: border-box;
+}
+nav.main-menu ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    justify-content: space-around; /* Evenly space out buttons */
+    align-items: center;
+    gap: 10px; /* Gap between buttons */
+}
+nav.main-menu ul li {
+    margin: 0; /* Remove old margin */
+    flex-grow: 1; /* Allow buttons to grow and share space */
+}
+nav.main-menu ul li button {
+    /* Inherit from .control-button and then specialize */
+    padding: 10px 15px; /* Slightly more padding for main nav buttons */
+    font-family: var(--font-stack);
+    font-size: 1em; /* Slightly larger for main nav */
+    font-weight: 500;
+    color: var(--primary-text-color);
+    background-color: var(--button-bg-color);
+    border: 1px solid var(--panel-border-color);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
+    width: 100%; /* Make buttons take full width of their li container */
+    text-align: center;
+}
+nav.main-menu ul li button:hover {
+    background-color: var(--button-hover-bg-color);
+    color: var(--accent-color); /* Accent color for text on hover */
+    border-color: var(--accent-color);
+}
+nav.main-menu ul li button:active {
+    transform: translateY(1px);
+}
+/* Style for a potentially active/highlighted main menu button if needed in JS later */
+/* nav.main-menu ul li button.active {
+    background-color: var(--accent-color);
+    color: white; 
+    border-color: var(--accent-color);
+}*/
+
+.controls-panel {
+    background-color: var(--panel-bg-color);
+    padding: 20px; /* Increased padding */
+    border-radius: var(--border-radius-md);
+    margin-bottom: 25px; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2); /* Softer, larger shadow */
+    display: flex;
+    justify-content: space-between; /* Adjust as needed */
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px; /* Add gap for better spacing of items */
+    width: calc(64 * 10px + 2px); 
+    max-width: 90%; 
+    border: 1px solid var(--panel-border-color);
+    box-sizing: border-box;
+}
+.control-item {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* Gap between label and control in an item */
+}
+.control-item label { /* General label style within control items */
+    color: var(--secondary-text-color);
+    font-size: 0.9em;
+    cursor: default; /* Default cursor for labels */
+}
+/* Specific button styling will be done in next steps. Removing old generic input/select styles for now */
+/* .control-item input[type="checkbox"] { ... } */
+/* .control-item select { ... } */
+
+.matrix-container {
+    display: grid;
+    grid-template-columns: repeat(64, 10px); 
+    grid-template-rows: repeat(64, 10px);    
+    border: 1px solid var(--panel-border-color); /* Updated border color */
+    background-color: #000; /* Keep matrix background black */
+    box-shadow: 0 0 25px rgba(0,0,0,0.6); /* Slightly enhanced shadow */
+    position: relative;
+    border-radius: var(--border-radius-sm); /* Subtle rounding for the matrix container itself */
+    overflow: hidden; /* Ensures pixel borders don't make it look odd with border-radius */
+}
+.center-guide {
+    position: absolute;
+    background-color: rgba(255, 0, 0, 0.7); /* Red, slightly transparent */
+    display: none; /* Initially hidden */
+    z-index: 5; /* Above grid, below dragged items if possible */
+    pointer-events: none; /* Should not interfere with mouse events */
+}
+#horizontal-center-guide {
+    width: 100%;
+    height: 1px;
+    left: 0;
+    /* top will be set by JS */
+}
+#vertical-center-guide {
+    height: 100%;
+    width: 1px;
+    top: 0;
+    /* left will be set by JS */
+}
+.pixel {
+    width: 10px;
+    height: 10px;
+    background-color: #000000; /* Default to black */
+    border: 1px solid #222; 
+    box-sizing: border-box;
+}
+/* Styles for widget overlay and draggable items */
+#widget-overlay-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%; /* Match matrix-container */
+    height: 100%; /* Match matrix-container */
+    pointer-events: none; /* Allow clicks to pass through to matrix unless on a draggable item */
+}
+.draggable-widget-representation {
+    position: absolute;
+    /* width: 20px; */ /* Will be set dynamically */
+    /* height: 20px; */ /* Will be set dynamically */
+    /* background-color: rgba(0, 150, 255, 0.5); */
+    background-color: transparent;
+    border: 1px dashed #61dafb; /* Dashed border for a less 'in-your-face' look */
+    /* color: white; */
+    /* font-size: 8px; */
+    /* display: flex; */
+    /* align-items: center; */
+    /* justify-content: center; */
+    cursor: grab;
+    pointer-events: auto; /* Enable pointer events for these items */
+    box-sizing: border-box;
+    /* overflow: hidden; */
+    /* text-overflow: ellipsis; */
+    /* white-space: nowrap; */
+}
+.draggable-widget-representation:active {
+    cursor: grabbing;
+    z-index: 10; /* Bring to front when dragging */
+}
+/* CSS to hide bounding boxes when parent has a specific class */
+#widget-overlay-container.bounding-boxes-hidden .draggable-widget-representation {
+    display: none;
+}
+.debug-panel {
+    background-color: var(--panel-bg-color);
+    border: 1px solid var(--panel-border-color);
+    padding: 15px; /* Adjusted padding */
+    border-radius: var(--border-radius-md);
+    margin-top: 25px; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column; 
+    align-items: center; 
+    gap: 10px; /* Gap for items inside */
+    width: calc(64 * 10px + 2px); 
+    max-width: 90%;
+    box-sizing: border-box;
+}
+.debug-panel h3 {
+    color: var(--accent-color); /* Use accent color */
+    margin-top: 0;
+    margin-bottom: 5px; /* Reduced margin */
+    text-align: center;
+    font-size: 1.2em;
+    font-weight: 500;
+}
+/* .debug-panel .control-item { ... } */ /* Will be handled by general .control-item if structure is same */
+
+/* Styling for buttons within control panels or as standalone controls */
+.control-button {
+    padding: 8px 15px;
+    font-family: var(--font-stack);
+    font-size: 0.9em;
+    font-weight: 500;
+    color: var(--primary-text-color);
+    background-color: var(--button-bg-color);
+    border: 1px solid var(--panel-border-color); /* Match panel border */
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+    text-align: center;
+}
+.control-button:hover {
+    background-color: var(--button-hover-bg-color);
+    border-color: var(--accent-color);
+}
+.control-button:active {
+    transform: translateY(1px);
+}
+
+/* Specific styling for the Edit/Live mode button and Logs button */
+#toggleEditModeBtn.live-mode, #toggleMatrixLogsBtn.logs-off {
+    background-color: var(--danger-color);
+    border-color: var(--danger-color);
+    color: white;
+}
+#toggleEditModeBtn.live-mode:hover, #toggleMatrixLogsBtn.logs-off:hover {
+    background-color: color-mix(in srgb, var(--danger-color) 80%, black);
+}
+#toggleEditModeBtn.edit-mode, #toggleMatrixLogsBtn.logs-on {
+    background-color: var(--success-color);
+    border-color: var(--success-color);
+    color: white;
+}
+#toggleEditModeBtn.edit-mode:hover, #toggleMatrixLogsBtn.logs-on:hover {
+    background-color: color-mix(in srgb, var(--success-color) 80%, black);
+}
+
+/* Styling for select dropdown */
+.control-item select {
+    padding: 8px 12px;
+    font-family: var(--font-stack);
+    font-size: 0.9em;
+    color: var(--primary-text-color);
+    background-color: var(--button-bg-color); /* Consistent with buttons */
+    border: 1px solid var(--panel-border-color);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+    min-width: 150px; /* Give it some base width */
+}
+.control-item select:hover {
+    border-color: var(--accent-color);
+}
+.control-item select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 30%, transparent);
+}
+
+/* Styling for custom checkbox (for screen rotation) */
+.control-item .checkbox-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    color: var(--secondary-text-color);
+    font-size: 0.9em;
+}
+.control-item input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    background-color: var(--button-bg-color);
+    border: 1px solid var(--panel-border-color);
+    border-radius: var(--border-radius-sm);
+    margin-right: 8px;
+    cursor: pointer;
+    position: relative;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+.control-item input[type="checkbox"]:hover {
+    border-color: var(--accent-color);
+}
+.control-item input[type="checkbox"]:checked {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+}
+.control-item input[type="checkbox"]:checked::before {
+    content: '\2713'; /* Checkmark character */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    color: var(--bg-color); /* Dark checkmark for contrast on accent bg */
+    font-weight: bold;
+}

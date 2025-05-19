@@ -31,29 +31,30 @@ class TimeWidget(BaseWidget):
         """Fetches time from an NTP server using ntplib and updates sync state."""
         client = ntplib.NTPClient()
         try:
-            print(f"[TimeWidget-{self.widget_id}] INFO: Attempting NTP sync with '{server_address}' (timeout: {self.ntp_timeout}s).")
+            # print(f"[TimeWidget-{self.widget_id}] INFO: Attempting NTP sync with '{server_address}' (timeout: {self.ntp_timeout}s).")
+            self._log("INFO", f"Attempting NTP sync with '{server_address}' (timeout: {self.ntp_timeout}s).")
             response = client.request(server_address, version=3, timeout=self.ntp_timeout)
-            # response.tx_time is the time the server transmitted the response (UTC)
-            # To get local time, one would typically need timezone info. For now, we assume server's UTC is desired.
-            # Or, if the system running this code has correct timezone settings, fromtimestamp will convert to local.
-            # However, NTP itself is about UTC. If we want timezone-aware display, that's another layer.
             ntp_datetime_utc = datetime.datetime.fromtimestamp(response.tx_time, tz=datetime.timezone.utc)
-            print(f"[TimeWidget-{self.widget_id}] INFO: NTP time received: {ntp_datetime_utc.isoformat()}")
+            # print(f"[TimeWidget-{self.widget_id}] INFO: NTP time received: {ntp_datetime_utc.isoformat()}")
+            self._log("INFO", f"NTP time received: {ntp_datetime_utc.isoformat()}")
             
-            # Update last sync info
             self.last_ntp_datetime_utc = ntp_datetime_utc
             self.last_ntp_sync_monotonic_time = time.monotonic()
             
             return ntp_datetime_utc
         except ntplib.NTPException as e:
-            print(f"[TimeWidget-{self.widget_id}] ERROR: NTPException from '{server_address}': {e}")
+            # print(f"[TimeWidget-{self.widget_id}] ERROR: NTPException from '{server_address}': {e}")
+            self._log("ERROR", f"NTPException from '{server_address}': {e}")
         except socket.gaierror as e: # Address-related error
-            print(f"[TimeWidget-{self.widget_id}] ERROR: NTP server address error for '{server_address}': {e}")
+            # print(f"[TimeWidget-{self.widget_id}] ERROR: NTP server address error for '{server_address}': {e}")
+            self._log("ERROR", f"NTP server address error for '{server_address}': {e}")
         except socket.timeout as e:
-            print(f"[TimeWidget-{self.widget_id}] ERROR: NTP request timed out for '{server_address}': {e}")
+            # print(f"[TimeWidget-{self.widget_id}] ERROR: NTP request timed out for '{server_address}': {e}")
+            self._log("ERROR", f"NTP request timed out for '{server_address}': {e}")
         except Exception as e: # Catch any other unexpected errors
-            print(f"[TimeWidget-{self.widget_id}] ERROR: Unexpected error during NTP request to '{server_address}': {e}")
-        return None # Fallback in case of any error
+            # print(f"[TimeWidget-{self.widget_id}] ERROR: Unexpected error during NTP request to '{server_address}': {e}")
+            self._log("ERROR", f"Unexpected error during NTP request to '{server_address}': {e}")
+        return None
 
     def get_content(self) -> str:
         """Returns the current time formatted, potentially synced with NTP."""
@@ -77,45 +78,45 @@ class TimeWidget(BaseWidget):
                 else:
                     # Log if it was an invalid value from config, but still use default
                     if str(resync_hours_config) != str(self.DEFAULT_NTP_RESYNC_INTERVAL_HOURS):
-                         print(f"[TimeWidget-{self.widget_id}] WARNING: ntp_resync_interval_hours ('{resync_hours_config}') must be positive. Defaulting to {self.DEFAULT_NTP_RESYNC_INTERVAL_HOURS}h.")
+                         # print(f"[TimeWidget-{self.widget_id}] WARNING: ntp_resync_interval_hours ('{resync_hours_config}') must be positive. Defaulting to {self.DEFAULT_NTP_RESYNC_INTERVAL_HOURS}h.")
+                         self._log("WARNING", f"ntp_resync_interval_hours ('{resync_hours_config}') must be positive. Defaulting to {self.DEFAULT_NTP_RESYNC_INTERVAL_HOURS}h.")
             except ValueError:
                 if str(resync_hours_config) != str(self.DEFAULT_NTP_RESYNC_INTERVAL_HOURS):
-                    print(f"[TimeWidget-{self.widget_id}] WARNING: Invalid ntp_resync_interval_hours ('{resync_hours_config}'). Defaulting to {self.DEFAULT_NTP_RESYNC_INTERVAL_HOURS}h.")
+                    # print(f"[TimeWidget-{self.widget_id}] WARNING: Invalid ntp_resync_interval_hours ('{resync_hours_config}'). Defaulting to {self.DEFAULT_NTP_RESYNC_INTERVAL_HOURS}h.")
+                    self._log("WARNING", f"Invalid ntp_resync_interval_hours ('{resync_hours_config}'). Defaulting to {self.DEFAULT_NTP_RESYNC_INTERVAL_HOURS}h.")
 
             needs_resync = False
             if self.last_ntp_sync_monotonic_time is None:
                 needs_resync = True
-                print(f"[TimeWidget-{self.widget_id}] INFO: First NTP sync attempt for this instance (or after config change).")
+                # print(f"[TimeWidget-{self.widget_id}] INFO: First NTP sync attempt for this instance (or after config change).")
+                self._log("INFO", "First NTP sync attempt for this instance (or after config change).")
             elif (time.monotonic() - self.last_ntp_sync_monotonic_time) > current_ntp_resync_interval_seconds:
                 needs_resync = True
-                print(f"[TimeWidget-{self.widget_id}] INFO: NTP resync interval ({current_ntp_resync_interval_seconds / 3600}h) reached. Attempting sync.")
+                # print(f"[TimeWidget-{self.widget_id}] INFO: NTP resync interval ({current_ntp_resync_interval_seconds / 3600}h) reached. Attempting sync.")
+                self._log("INFO", f"NTP resync interval ({current_ntp_resync_interval_seconds / 3600}h) reached. Attempting sync.")
 
             if needs_resync:
                 fetched_ntp_utc = self._fetch_ntp_time(self.ntp_server_address)
                 if fetched_ntp_utc:
-                    # Successfully synced, use this new time
                     current_time_for_display = fetched_ntp_utc.astimezone()
                 elif self.last_ntp_datetime_utc is not None and self.last_ntp_sync_monotonic_time is not None:
-                    # Sync failed, but we have a previous sync. Use that and calculate forward.
-                    print(f"[TimeWidget-{self.widget_id}] WARNING: NTP sync failed. Using last known NTP time and incrementing locally.")
+                    # print(f"[TimeWidget-{self.widget_id}] WARNING: NTP sync failed. Using last known NTP time and incrementing locally.")
+                    self._log("WARNING", "NTP sync failed. Using last known NTP time and incrementing locally.")
                     elapsed_seconds = time.monotonic() - self.last_ntp_sync_monotonic_time
                     calculated_utc = self.last_ntp_datetime_utc + datetime.timedelta(seconds=elapsed_seconds)
                     current_time_for_display = calculated_utc.astimezone()
                 else:
-                    # Sync failed and no previous sync data. Fallback to system time.
-                    print(f"[TimeWidget-{self.widget_id}] WARNING: NTP sync failed and no previous sync data. Falling back to system time.")
+                    # print(f"[TimeWidget-{self.widget_id}] WARNING: NTP sync failed and no previous sync data. Falling back to system time.")
+                    self._log("WARNING", "NTP sync failed and no previous sync data. Falling back to system time.")
                     current_time_for_display = system_now
             elif self.last_ntp_datetime_utc is not None and self.last_ntp_sync_monotonic_time is not None:
-                # Not time to resync, use last NTP time and increment locally
                 elapsed_seconds = time.monotonic() - self.last_ntp_sync_monotonic_time
                 calculated_utc = self.last_ntp_datetime_utc + datetime.timedelta(seconds=elapsed_seconds)
                 current_time_for_display = calculated_utc.astimezone()
-                # print(f"[TimeWidget-{self.widget_id}] DEBUG: Using locally incremented NTP time: {current_time_for_display.isoformat()}") # Optional: for debugging
+                # self._log("DEBUG", f"Using locally incremented NTP time: {current_time_for_display.isoformat()}") # Optional: for debugging
             else:
-                 # Should not happen if logic is correct (enable_ntp is true but no sync info and not needing resync)
-                 # This case implies last_ntp_datetime_utc or last_ntp_sync_monotonic_time is None,
-                 # which should have triggered needs_resync. But as a safeguard:
-                print(f"[TimeWidget-{self.widget_id}] WARNING: NTP enabled but in an unexpected state. Falling back to system time.")
+                # print(f"[TimeWidget-{self.widget_id}] WARNING: NTP enabled but in an unexpected state. Falling back to system time.")
+                self._log("WARNING", "NTP enabled but in an unexpected state. Falling back to system time.")
                 current_time_for_display = system_now
         else:
             current_time_for_display = system_now
@@ -127,7 +128,7 @@ class TimeWidget(BaseWidget):
     @staticmethod
     def get_config_options() -> list:
         """Returns specific configuration options for the Time widget."""
-        options = BaseWidget.get_config_options()
+        options = BaseWidget.get_config_options() # Get base options including 'enable_logging'
         options.extend([
             {
                 'name': 'time_format',

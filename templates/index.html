@@ -4,142 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>64x64 Matrix Simulator</title>
-    <style>
-        body {
-            display: flex;
-            flex-direction: column; /* Arrange children vertically */
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background-color: #282c34;
-            margin: 0;
-            font-family: sans-serif;
-            color: #fff;
-        }
-        header h1 {
-            margin-bottom: 20px;
-            color: #61dafb;
-        }
-        nav.main-menu {
-            background-color: #20232a;
-            padding: 10px 0;
-            border-radius: 8px;
-            margin-top: 30px; /* Changed from margin-bottom to margin-top */
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        }
-        nav.main-menu ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            display: flex;
-            justify-content: center;
-        }
-        nav.main-menu ul li {
-            margin: 0 10px;
-        }
-        nav.main-menu ul li button {
-            background-color: transparent;
-            color: #61dafb;
-            border: 1px solid #61dafb;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s, color 0.3s;
-        }
-        nav.main-menu ul li button:hover,
-        nav.main-menu ul li button.active {
-            background-color: #61dafb;
-            color: #20232a;
-        }
-
-        .controls-panel {
-            background-color: #20232a; /* Similar to nav menu for consistency */
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px; /* Space above the matrix */
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            display: flex;
-            justify-content: space-around; /* Distribute items */
-            align-items: center;
-            flex-wrap: wrap; /* Allow wrapping on smaller screens */
-            width: calc(64 * 10px + 2px); /* Match matrix width */
-            max-width: 90%; /* Prevent it from being too wide on very large screens */
-            box-sizing: border-box;
-        }
-        .control-item {
-            margin: 5px 10px; /* Spacing around each control */
-            display: flex;
-            align-items: center;
-        }
-        .control-item label {
-            color: #abb2bf; /* Lighter grey for labels */
-            margin-right: 8px; /* Space between label and input if they are separate */
-        }
-        .control-item input[type="checkbox"] {
-            margin-right: 5px;
-        }
-        .control-item select {
-            padding: 8px;
-            border-radius: 4px;
-            background-color: #333842;
-            color: #fff;
-            border: 1px solid #444;
-        }
-
-        .matrix-container {
-            display: grid;
-            grid-template-columns: repeat(64, 10px); 
-            grid-template-rows: repeat(64, 10px);    
-            border: 1px solid #444;
-            background-color: #000;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            position: relative; /* Added for positioning the overlay */
-        }
-        .pixel {
-            width: 10px;
-            height: 10px;
-            background-color: #000000; /* Default to black */
-            border: 1px solid #222; 
-            box-sizing: border-box;
-        }
-        /* Styles for widget overlay and draggable items */
-        #widget-overlay-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%; /* Match matrix-container */
-            height: 100%; /* Match matrix-container */
-            pointer-events: none; /* Allow clicks to pass through to matrix unless on a draggable item */
-        }
-        .draggable-widget-representation {
-            position: absolute;
-            /* width: 20px; */ /* Will be set dynamically */
-            /* height: 20px; */ /* Will be set dynamically */
-            /* background-color: rgba(0, 150, 255, 0.5); */
-            background-color: transparent;
-            border: 1px dashed #61dafb; /* Dashed border for a less 'in-your-face' look */
-            /* color: white; */
-            /* font-size: 8px; */
-            /* display: flex; */
-            /* align-items: center; */
-            /* justify-content: center; */
-            cursor: grab;
-            pointer-events: auto; /* Enable pointer events for these items */
-            box-sizing: border-box;
-            /* overflow: hidden; */
-            /* text-overflow: ellipsis; */
-            /* white-space: nowrap; */
-        }
-        .draggable-widget-representation:active {
-            cursor: grabbing;
-            z-index: 10; /* Bring to front when dragging */
-        }
-        /* CSS to hide bounding boxes when parent has a specific class */
-        #widget-overlay-container.bounding-boxes-hidden .draggable-widget-representation {
-            display: none;
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
     <header>
@@ -148,17 +13,14 @@
 
     <div class="controls-panel">
         <div class="control-item">
-            <label for="toggleBoundingBoxes" style="color: #ccc;">
-                <input type="checkbox" id="toggleBoundingBoxes" checked>
-                Toggle Drag/Drop
-            </label>
+            <button id="toggleEditModeBtn" style="padding: 8px 12px; background-color: #dc3545; color: white; border: 1px solid #666; border-radius: 4px; cursor: pointer;">LIVE Mode</button>
         </div>
         <div class="control-item" style="display: flex; align-items: center;">
             <label for="liveScreenSelector" style="color: #ccc; margin-right: 10px;">Active Screen:</label>
             <select id="liveScreenSelector" style="padding: 8px; border-radius: 4px; background-color: #333842; color: #fff; border: 1px solid #444;"></select>
         </div>
         <div class="control-item">
-            <label for="enableScreenRotationCheckbox" style="color: #ccc;">
+            <label class="checkbox-label" for="enableScreenRotationCheckbox">
                 <input type="checkbox" id="enableScreenRotationCheckbox">
                 Enable Auto Screen Rotation
             </label>
@@ -170,6 +32,8 @@
         <div id="widget-overlay-container">
             <!-- Draggable widget representations will be added here -->
         </div>
+        <div id="horizontal-center-guide" class="center-guide"></div>
+        <div id="vertical-center-guide" class="center-guide"></div>
     </div>
 
     <nav class="main-menu">
@@ -179,6 +43,15 @@
             <li><button id="btnConfigure">Configure Widgets</button></li>
         </ul>
     </nav>
+
+    <!-- Debug Panel Added Here -->
+    <div class="debug-panel">
+        <h3>Debug Controls</h3>
+        <div class="control-item">
+            <button id="toggleMatrixLogsBtn" style="padding: 8px 12px; background-color: #4F545C; color: white; border: 1px solid #666; border-radius: 4px; cursor: pointer;">Toggle Matrix Req. Logs</button>
+        </div>
+        <!-- Add other debug buttons here in the future -->
+    </div>
 
     <script>
         const MATRIX_WIDTH = 64;
@@ -196,14 +69,19 @@
         let jsCurrentDisplayMode = 'default'; // Mirror backend's initial display mode
         let draggedWidgetElement = null;
         let offsetX, offsetY;
+        let isEditMode = false; // Default to LIVE mode
 
         const widgetOverlayContainer = document.getElementById('widget-overlay-container');
-        const toggleBoundingBoxesCheckbox = document.getElementById('toggleBoundingBoxes');
-        const liveScreenSelector = document.getElementById('liveScreenSelector'); // New selector
+        const toggleEditModeBtn = document.getElementById('toggleEditModeBtn'); // New button
+        const liveScreenSelector = document.getElementById('liveScreenSelector'); 
         const enableScreenRotationCheckbox = document.getElementById('enableScreenRotationCheckbox');
+        const toggleMatrixLogsBtn = document.getElementById('toggleMatrixLogsBtn');
+        const horizontalCenterGuide = document.getElementById('horizontal-center-guide');
+        const verticalCenterGuide = document.getElementById('vertical-center-guide');
 
         let rotationTimeoutId = null;
         let currentRotationScreenIndex = 0; // To keep track of which screen is next in rotation
+        let currentWidgetDimensions = []; // To store dimensions from API
 
         // Create the grid cells
         for (let r = 0; r < MATRIX_HEIGHT; r++) {
@@ -228,6 +106,7 @@
                 
                 if (data.pixels) {
                     jsCurrentDisplayMode = data.current_display_mode || jsCurrentDisplayMode;
+                    currentWidgetDimensions = data.widgets_dimensions || []; // Store widget dimensions
                      for (let r = 0; r < MATRIX_HEIGHT; r++) {
                         for (let c = 0; c < MATRIX_WIDTH; c++) {
                             const pixelElement = document.getElementById(`pixel-${r}-${c}`);
@@ -289,102 +168,106 @@
         }
 
         function renderDraggableWidgets() {
-            widgetOverlayContainer.innerHTML = ''; // Clear existing draggable widgets
-
-            // If bounding boxes are meant to be hidden by the toggle, don't render anything here.
-            // The CSS class on widgetOverlayContainer will handle hiding if elements are already there from a previous render.
-            // However, to prevent adding them to DOM pointlessly, we can check here too.
-            if (toggleBoundingBoxesCheckbox && !toggleBoundingBoxesCheckbox.checked) {
-                 // Ensure the class is set if the checkbox is unchecked initially or by script
+            // Ensure the container's visibility class is correctly set based on the checkbox OR isEditMode
+            if (!isEditMode) { // If not in edit mode, always hide
                 widgetOverlayContainer.classList.add('bounding-boxes-hidden');
-                return; 
-            }
-            // If we are here, boxes should be visible, so remove the class if present
-            widgetOverlayContainer.classList.remove('bounding-boxes-hidden');
-
-            if (!currentScreenLayouts || !jsCurrentDisplayMode || !currentScreenLayouts[jsCurrentDisplayMode] || !currentScreenLayouts[jsCurrentDisplayMode].widgets) {
-                // console.warn(`No widgets to render for mode: ${jsCurrentDisplayMode}`, currentScreenLayouts);
-                return;
+            } else { // In edit mode, always show (CSS might still hide individual elements if needed, but container is ready)
+                widgetOverlayContainer.classList.remove('bounding-boxes-hidden');
             }
 
-            const currentWidgets = currentScreenLayouts[jsCurrentDisplayMode].widgets;
-            currentWidgets.forEach(widget => {
-                if (!widget.enabled) return;
-
-                const widgetRep = document.createElement('div');
-                widgetRep.classList.add('draggable-widget-representation');
-                widgetRep.id = `drag-widget-${widget.id}`;
-                widgetRep.dataset.widgetId = widget.id;
-                // widgetRep.textContent = widget.id.substring(0,3) + '..'; // Short ID - Removing text for cleaner look
-
-                // Position based on widget's x, y (top-left) and cell size
-                widgetRep.style.left = (widget.x * CELL_SIZE) + 'px';
-                widgetRep.style.top = (widget.y * CELL_SIZE) + 'px';
-
-                // Accurate sizing based on content and font (5x7 font, 1px char spacing)
-                // Effective character width = 5 (char) + 1 (space) = 6px
-                // Effective character height = 7px
-                const FONT_CHAR_WIDTH_PX = 5;
-                const FONT_CHAR_HEIGHT_PX = 7;
-                const CHAR_SPACING_PX = 1;
-                const EFFECTIVE_CHAR_WIDTH_GRID = FONT_CHAR_WIDTH_PX + CHAR_SPACING_PX; // in matrix cells
-                const EFFECTIVE_CHAR_HEIGHT_GRID = FONT_CHAR_HEIGHT_PX; // in matrix cells
-                
-                let widgetGridWidth = 3; // Default minimum width (e.g. 3 cells)
-                let widgetGridHeight = EFFECTIVE_CHAR_HEIGHT_GRID; // Default height (7 cells)
-
-                if (widget.type === 'text' && widget.text && widget.text.length > 0) {
-                    widgetGridWidth = (widget.text.length * EFFECTIVE_CHAR_WIDTH_GRID) - CHAR_SPACING_PX; // Subtract last spacer
-                    widgetGridHeight = EFFECTIVE_CHAR_HEIGHT_GRID;
-                    // widgetRep.title = widget.text; // Show full text on hover
-                } else if (widget.type === 'time') { // Assuming HH:MM format (5 chars)
-                    widgetGridWidth = (5 * EFFECTIVE_CHAR_WIDTH_GRID) - CHAR_SPACING_PX;
-                    widgetGridHeight = EFFECTIVE_CHAR_HEIGHT_GRID;
-                } else if (widget.type === 'date') { // Assuming MM/DD or DD/MM (5 chars)
-                    widgetGridWidth = (5 * EFFECTIVE_CHAR_WIDTH_GRID) - CHAR_SPACING_PX;
-                    widgetGridHeight = EFFECTIVE_CHAR_HEIGHT_GRID;
-                } else if (widget.type === 'network_ssid' || widget.type === 'network_rssi') {
-                    // These are dynamic. If they have a 'text' field populated by backend (e.g. actual SSID), use that.
-                    // Otherwise, use a sensible default.
-                    // For now, let's assume they might have a typical length, e.g., 8-10 chars for SSID.
-                    // This part is tricky without knowing the actual rendered text length from backend.
-                    // We can give it a moderate default size.
-                    const typicalLength = widget.text?.length || 8; // Use widget.text if available (e.g. after first fetch)
-                    widgetGridWidth = (typicalLength * EFFECTIVE_CHAR_WIDTH_GRID) - CHAR_SPACING_PX;
-                    if (widget.type === 'network_rssi' && (!widget.text || widget.text.length < 5)) { // RSSI like "-55dB"
-                         widgetGridWidth = (5 * EFFECTIVE_CHAR_WIDTH_GRID) - CHAR_SPACING_PX;
-                    }
-                    widgetGridHeight = EFFECTIVE_CHAR_HEIGHT_GRID;
+            const activeDraggedWidgetId = draggedWidgetElement ? draggedWidgetElement.dataset.widgetId : null;
+            
+            // Create a set of widget IDs that are currently in the DOM from the previous render
+            const existingWidgetRepIds = new Set();
+            Array.from(widgetOverlayContainer.children).forEach(child => {
+                if (child.id.startsWith('drag-widget-')) {
+                    existingWidgetRepIds.add(child.id);
                 }
-                // Ensure minimum size
-                widgetGridWidth = Math.max(1, widgetGridWidth); // min 1 cell wide
-                widgetGridHeight = Math.max(1, widgetGridHeight); // min 1 cell high
+            });
 
+            const currentScreenConfig = currentScreenLayouts && jsCurrentDisplayMode ? currentScreenLayouts[jsCurrentDisplayMode] : null;
+            const widgetsToRenderConfig = (currentScreenConfig && currentScreenConfig.widgets) ? currentScreenConfig.widgets : [];
+            const renderedWidgetRepIds = new Set(); // Keep track of widget reps processed in this pass
+
+            widgetsToRenderConfig.forEach(widgetConfig => {
+                if (!widgetConfig.enabled) return;
+
+                const widgetRepId = `drag-widget-${widgetConfig.id}`;
+                renderedWidgetRepIds.add(widgetRepId);
+                let widgetRep = document.getElementById(widgetRepId);
+
+                // If this widget is the one currently being dragged
+                if (activeDraggedWidgetId === widgetConfig.id && draggedWidgetElement === widgetRep) {
+                    // Ensure its dimensions are up-to-date. Position is handled by onMouseMove.
+                    const dims = currentWidgetDimensions.find(d => d.id === widgetConfig.id);
+                    let widgetGridWidth = dims ? (dims.width_cells > 0 ? dims.width_cells : 1) : 5;
+                    let widgetGridHeight = dims ? (dims.height_cells > 0 ? dims.height_cells : 1) : 7;
+                    
+                    draggedWidgetElement.style.width = (widgetGridWidth * CELL_SIZE) + 'px';
+                    draggedWidgetElement.style.height = (widgetGridHeight * CELL_SIZE) + 'px';
+                    draggedWidgetElement.dataset.gridWidth = widgetGridWidth;
+                    draggedWidgetElement.dataset.gridHeight = widgetGridHeight;
+                    // DO NOT set left/top here for the dragged element; onMouseMove handles it.
+                    return; // Skip further processing for this widget
+                }
+
+                // If widgetRep doesn't exist, create it
+                if (!widgetRep) {
+                    widgetRep = document.createElement('div');
+                    widgetRep.classList.add('draggable-widget-representation');
+                    widgetRep.id = widgetRepId;
+                    widgetRep.dataset.widgetId = widgetConfig.id;
+                    widgetRep.addEventListener('mousedown', onMouseDown);
+                    widgetOverlayContainer.appendChild(widgetRep);
+                }
+
+                // Update position (from config) and dimensions for non-dragged or newly created widgets
+                widgetRep.style.left = (widgetConfig.x * CELL_SIZE) + 'px';
+                widgetRep.style.top = (widgetConfig.y * CELL_SIZE) + 'px';
+
+                const dims = currentWidgetDimensions.find(d => d.id === widgetConfig.id);
+                let widgetGridWidth = dims ? (dims.width_cells > 0 ? dims.width_cells : 1) : 5;
+                let widgetGridHeight = dims ? (dims.height_cells > 0 ? dims.height_cells : 1) : 7;
 
                 widgetRep.style.width = (widgetGridWidth * CELL_SIZE) + 'px';
                 widgetRep.style.height = (widgetGridHeight * CELL_SIZE) + 'px';
-                
-                // Store grid dimensions for clamping during drag if needed, or for other logic
                 widgetRep.dataset.gridWidth = widgetGridWidth;
                 widgetRep.dataset.gridHeight = widgetGridHeight;
+            });
 
-
-                widgetRep.addEventListener('mousedown', onMouseDown);
-                widgetOverlayContainer.appendChild(widgetRep);
+            // Cleanup: Remove any widget representations from the DOM that are no longer in the config
+            // or correspond to a disabled widget, but ensure not to remove the actively dragged one.
+            existingWidgetRepIds.forEach(existingId => {
+                if (!renderedWidgetRepIds.has(existingId)) {
+                    // If the widget is not in the current render list (e.g. screen changed, widget removed/disabled)
+                    // AND it's not the actively dragged element, remove it.
+                    if (!(activeDraggedWidgetId && `drag-widget-${activeDraggedWidgetId}` === existingId)) {
+                         const elToRemove = document.getElementById(existingId);
+                         if (elToRemove) {
+                            widgetOverlayContainer.removeChild(elToRemove);
+                         }
+                    }
+                }
             });
         }
 
         function onMouseDown(event) {
             if (event.button !== 0) return; // Only main mouse button
+            if (!isEditMode) return; // Only allow dragging in Edit Mode
+
             draggedWidgetElement = event.target.closest('.draggable-widget-representation');
             if (!draggedWidgetElement) return;
 
             event.preventDefault(); // Prevent text selection, etc.
             draggedWidgetElement.style.cursor = 'grabbing';
 
+            // Hide centering guides on new drag start
+            if (horizontalCenterGuide) horizontalCenterGuide.style.display = 'none';
+            if (verticalCenterGuide) verticalCenterGuide.style.display = 'none';
+
             // Calculate offset from mouse pointer to top-left of element
             const rect = draggedWidgetElement.getBoundingClientRect();
-            const overlayRect = widgetOverlayContainer.getBoundingClientRect();
+            // const overlayRect = widgetOverlayContainer.getBoundingClientRect(); // Not needed here if offsetX/Y are relative to element
             offsetX = event.clientX - rect.left;
             offsetY = event.clientY - rect.top;
             
@@ -396,37 +279,82 @@
             if (!draggedWidgetElement) return;
 
             const overlayRect = widgetOverlayContainer.getBoundingClientRect();
-            let newLeft = event.clientX - offsetX - overlayRect.left;
-            let newTop = event.clientY - offsetY - overlayRect.top;
+            // Calculate the desired top-left position of the element based on mouse movement
+            let targetPixelX = event.clientX - offsetX - overlayRect.left;
+            let targetPixelY = event.clientY - offsetY - overlayRect.top;
 
-            // Constrain to overlay bounds (optional, but good for UX)
-            newLeft = Math.max(0, Math.min(newLeft, overlayRect.width - draggedWidgetElement.offsetWidth));
-            newTop = Math.max(0, Math.min(newTop, overlayRect.height - draggedWidgetElement.offsetHeight));
+            // Convert to grid coordinates and snap
+            let snappedGridX = Math.round(targetPixelX / CELL_SIZE);
+            let snappedGridY = Math.round(targetPixelY / CELL_SIZE);
 
-            draggedWidgetElement.style.left = newLeft + 'px';
-            draggedWidgetElement.style.top = newTop + 'px';
+            // Get widget dimensions in grid cells from its dataset
+            const widgetGridWidth = parseInt(draggedWidgetElement.dataset.gridWidth) || 1;
+            const widgetGridHeight = parseInt(draggedWidgetElement.dataset.gridHeight) || 1;
+
+            // Clamp grid coordinates to ensure the entire widget stays within the matrix
+            snappedGridX = Math.max(0, Math.min(snappedGridX, MATRIX_WIDTH - widgetGridWidth));
+            snappedGridY = Math.max(0, Math.min(snappedGridY, MATRIX_HEIGHT - widgetGridHeight));
+
+            // Convert snapped grid coordinates back to pixel values for display
+            const finalPixelX = snappedGridX * CELL_SIZE;
+            const finalPixelY = snappedGridY * CELL_SIZE;
+
+            draggedWidgetElement.style.left = finalPixelX + 'px';
+            draggedWidgetElement.style.top = finalPixelY + 'px';
+
+            // Centering guides logic
+            const widgetCenterX = snappedGridX + widgetGridWidth / 2;
+            const widgetCenterY = snappedGridY + widgetGridHeight / 2;
+            const matrixCenterX = MATRIX_WIDTH / 2;
+            const matrixCenterY = MATRIX_HEIGHT / 2;
+            const tolerance = 0.5; // Cells. A widget center must be within this distance of matrix center.
+
+            // Vertical guide for horizontal centering
+            if (Math.abs(widgetCenterX - matrixCenterX) <= tolerance) {
+                if (verticalCenterGuide) {
+                    verticalCenterGuide.style.display = 'block';
+                    // Center the 1px guide line itself on the matrix center line
+                    verticalCenterGuide.style.left = (matrixCenterX * CELL_SIZE - (parseInt(getComputedStyle(verticalCenterGuide).width, 10) / 2)) + 'px';
+                }
+            } else {
+                if (verticalCenterGuide) verticalCenterGuide.style.display = 'none';
+            }
+
+            // Horizontal guide for vertical centering
+            if (Math.abs(widgetCenterY - matrixCenterY) <= tolerance) {
+                if (horizontalCenterGuide) {
+                    horizontalCenterGuide.style.display = 'block';
+                    // Center the 1px guide line itself on the matrix center line
+                    horizontalCenterGuide.style.top = (matrixCenterY * CELL_SIZE - (parseInt(getComputedStyle(horizontalCenterGuide).height, 10) / 2)) + 'px';
+                }
+            } else {
+                if (horizontalCenterGuide) horizontalCenterGuide.style.display = 'none';
+            }
         }
 
         async function onMouseUp(event) {
             if (!draggedWidgetElement) return;
             draggedWidgetElement.style.cursor = 'grab';
 
+            // Hide centering guides on drag end
+            if (horizontalCenterGuide) horizontalCenterGuide.style.display = 'none';
+            if (verticalCenterGuide) verticalCenterGuide.style.display = 'none';
+
             const widgetId = draggedWidgetElement.dataset.widgetId;
             
-            // Calculate grid cell based on the center of the dragged element for better snap
-            const finalPixelX = parseFloat(draggedWidgetElement.style.left) + (draggedWidgetElement.offsetWidth / 2);
-            const finalPixelY = parseFloat(draggedWidgetElement.style.top) + (draggedWidgetElement.offsetHeight / 2);
+            // Calculate grid cell based on the top-left of the dragged element
+            let gridX = Math.round(parseFloat(draggedWidgetElement.style.left) / CELL_SIZE);
+            let gridY = Math.round(parseFloat(draggedWidgetElement.style.top) / CELL_SIZE);
 
-            let gridX = Math.round(finalPixelX / CELL_SIZE);
-            let gridY = Math.round(finalPixelY / CELL_SIZE);
+            // Get widget dimensions from its dataset
+            const widgetGridWidth = parseInt(draggedWidgetElement.dataset.gridWidth) || 1;
+            const widgetGridHeight = parseInt(draggedWidgetElement.dataset.gridHeight) || 1;
 
-            // Clamp to matrix boundaries (0 to 63 for a 64x64 matrix)
-            // Widget X,Y is top-left, so it should not make part of widget go off screen.
-            // For simplicity, let's use the calculated X,Y as top-left and clamp.
-            gridX = Math.max(0, Math.min(gridX, MATRIX_WIDTH - 1));
-            gridY = Math.max(0, Math.min(gridY, MATRIX_HEIGHT - 1));
+            // Clamp to matrix boundaries to ensure the entire widget stays within
+            gridX = Math.max(0, Math.min(gridX, MATRIX_WIDTH - widgetGridWidth));
+            gridY = Math.max(0, Math.min(gridY, MATRIX_HEIGHT - widgetGridHeight));
             
-            // Snap visual element to grid
+            // Snap visual element to grid (top-left corner)
             draggedWidgetElement.style.left = (gridX * CELL_SIZE) + 'px';
             draggedWidgetElement.style.top = (gridY * CELL_SIZE) + 'px';
 
@@ -689,13 +617,14 @@
             await fetchScreenLayouts(); // Fetches layouts, and calls populateLiveScreenSelector if needed
             
             // Set initial state of bounding boxes based on checkbox
-            if (toggleBoundingBoxesCheckbox) {
-                if (toggleBoundingBoxesCheckbox.checked) {
-                    widgetOverlayContainer.classList.remove('bounding-boxes-hidden');
-                } else {
-                    widgetOverlayContainer.classList.add('bounding-boxes-hidden');
-                }
-            }
+            // if (toggleBoundingBoxesCheckbox) { // REMOVED
+            //     if (toggleBoundingBoxesCheckbox.checked) {
+            //         widgetOverlayContainer.classList.remove('bounding-boxes-hidden');
+            //     } else {
+            //         widgetOverlayContainer.classList.add('bounding-boxes-hidden');
+            //     }
+            // }
+            updateEditModeButtonState(); // Set initial button text/style and overlay visibility
 
             await fetchAndUpdateMatrix(); 
             updateMenuButtons(jsCurrentDisplayMode); 
@@ -704,19 +633,105 @@
             }, 1000);
         }
 
-        // Event listener for the toggle
-        if (toggleBoundingBoxesCheckbox) {
-            toggleBoundingBoxesCheckbox.addEventListener('change', () => {
-                if (toggleBoundingBoxesCheckbox.checked) {
-                    widgetOverlayContainer.classList.remove('bounding-boxes-hidden');
-                    renderDraggableWidgets(); // Re-render to show them
-                } else {
-                    widgetOverlayContainer.classList.add('bounding-boxes-hidden');
-                    // No need to re-render, CSS will hide them. 
-                    // If you want to clear them from DOM too, you can call widgetOverlayContainer.innerHTML = '';
-                }
-            });
+        // --- Matrix Log Toggle --- 
+        async function updateMatrixLogToggleText(isLoggingEnabled) {
+            toggleMatrixLogsBtn.textContent = isLoggingEnabled ? "Matrix Logs: ON" : "Matrix Logs: OFF";
+            toggleMatrixLogsBtn.classList.remove(isLoggingEnabled ? 'logs-off' : 'logs-on');
+            toggleMatrixLogsBtn.classList.add(isLoggingEnabled ? 'logs-on' : 'logs-off');
         }
+
+        async function fetchMatrixLoggingStatus() {
+            try {
+                const response = await fetch('/api/get_matrix_logging_status');
+                if (response.ok) {
+                    const data = await response.json();
+                    updateMatrixLogToggleText(data.enabled);
+                    toggleMatrixLogsBtn.classList.add('control-button'); // Add base class for styling
+                }
+            } catch (error) {
+                console.error("Error fetching matrix logging status:", error);
+                toggleMatrixLogsBtn.textContent = "Matrix Logs: Error";
+                toggleMatrixLogsBtn.classList.remove('logs-on');
+                toggleMatrixLogsBtn.classList.add('logs-off');
+            }
+        }
+
+        toggleMatrixLogsBtn.addEventListener('click', async () => {
+            let currentStatus = toggleMatrixLogsBtn.textContent.includes("ON");
+            let newStatus = !currentStatus;
+            try {
+                const response = await fetch('/api/set_matrix_logging_status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ enabled: newStatus })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    updateMatrixLogToggleText(data.enabled);
+                } else {
+                    console.error("Error setting matrix logging status");
+                    const oldText = toggleMatrixLogsBtn.textContent;
+                    toggleMatrixLogsBtn.textContent = "Matrix Logs: Error";
+                    setTimeout(() => { toggleMatrixLogsBtn.textContent = oldText; }, 2000);
+                }
+            } catch (error) {
+                console.error("Error setting matrix logging status:", error);
+                const oldText = toggleMatrixLogsBtn.textContent;
+                toggleMatrixLogsBtn.textContent = "Matrix Logs: Error";
+                setTimeout(() => { toggleMatrixLogsBtn.textContent = oldText; }, 2000);
+            }
+        });
+
+        // --- Initialization and Main Loop ---
+        async function fetchMatrixDataAndUpdate() {
+            await fetchAndUpdateMatrix();
+        }
+
+        async function fetchScreenLayoutsAndUpdateSelector() {
+            await fetchScreenLayouts();
+            populateLiveScreenSelector();
+        }
+
+        async function fetchMatrixLoggingStatusAndUpdate() {
+            await fetchMatrixLoggingStatus();
+        }
+
+        // Fetch initial data and start periodic updates
+        fetchMatrixDataAndUpdate(); 
+        fetchScreenLayoutsAndUpdateSelector(); // Fetch all layouts for the selector
+        fetchMatrixLoggingStatusAndUpdate(); // Get initial state of matrix log toggle
+        
+        // setInterval(fetchMatrixDataAndUpdate, 1000); // Already have one in initializeSimulator
+        setInterval(fetchScreenLayoutsAndUpdateSelector, 15000); // Periodically update layouts for selector (e.g., if changed elsewhere)
+
+        // --- Edit Mode Toggle Button Logic ---
+        function updateEditModeButtonState() {
+            if (isEditMode) {
+                toggleEditModeBtn.textContent = "EDIT Mode";
+                toggleEditModeBtn.classList.remove('live-mode');
+                toggleEditModeBtn.classList.add('edit-mode');
+                widgetOverlayContainer.classList.remove('bounding-boxes-hidden');
+                renderDraggableWidgets(); // Ensure widgets are shown if switching to edit mode
+            } else {
+                toggleEditModeBtn.textContent = "LIVE Mode";
+                toggleEditModeBtn.classList.remove('edit-mode');
+                toggleEditModeBtn.classList.add('live-mode');
+                widgetOverlayContainer.classList.add('bounding-boxes-hidden');
+            }
+            toggleEditModeBtn.classList.add('control-button'); // Add base class for styling
+        }
+
+        toggleEditModeBtn.addEventListener('click', () => {
+            isEditMode = !isEditMode;
+            updateEditModeButtonState();
+            // If switching to edit mode, and widgets aren't rendered yet, render them.
+            // If switching to live mode, the classList.add will hide them via CSS.
+            if (isEditMode) {
+                renderDraggableWidgets();
+            }
+        });
 
         initializeSimulator();
     </script>
