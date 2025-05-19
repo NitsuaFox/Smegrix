@@ -168,7 +168,7 @@ The widget system is designed to be modular and extensible.
 
 Several widgets utilize format strings with placeholders. Here are some common ones:
 
-### Weather Widget (`weather_widget.py`)
+### Weather Widgetdd (`weather_widget.py`)
 Uses `display_format` option. Example: `"{dow_1}: {temp_max_1}{unit_symbol} / {temp_min_1}{unit_symbol}"`
 *   `{temp}`: Current temperature.
 *   `{unit_symbol}`: 'C' or 'F'.
