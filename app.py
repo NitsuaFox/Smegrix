@@ -82,7 +82,7 @@ default_screen_layouts = {
         "name": "Home Screen",
         "widgets": [
             {"id": "time_default", "type": "time", "x": (MATRIX_WIDTH - 29) // 2, "y": (MATRIX_HEIGHT - (2 * 7 + 3)) // 2, "enabled": True, "time_format": "%H:%M", "color": "#61DAFB", "font_size": "medium"},
-            {"id": "date_default", "type": "date", "x": (MATRIX_WIDTH - 29) // 2, "y": ((MATRIX_HEIGHT - (2 * 7 + 3)) // 2) + 7 + 3, "enabled": True, "date_format_type": "dd_mm", "color": "#FFFFFF"}
+            {"id": "date_default", "type": "date", "x": (MATRIX_WIDTH - 29) // 2, "y": ((MATRIX_HEIGHT - (2 * 7 + 3)) // 2) + 7 + 3, "enabled": True, "date_format_type": "dd_mm", "color": "#FFFFFF", "font_size": "medium"}
         ],
         "display_time_seconds": 10
     },

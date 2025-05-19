@@ -17,6 +17,7 @@ class DateWidget(BaseWidget):
         super().__init__(config, global_context)
         # Store the chosen format type, defaulting to 'dd_mm' (12/01)
         self.date_format_type = self.config.get('date_format_type', "dd_mm") 
+        self.font_size = self.config.get('font_size', "medium")
 
     def get_content(self) -> str:
         """Returns the current date formatted based on the selected type."""
@@ -42,6 +43,17 @@ class DateWidget(BaseWidget):
                     {'value': 'dd_mm', 'label': 'DD/MM (e.g., 12/01)'},
                     {'value': 'dd_mm_yy', 'label': 'DD/MM/YY (e.g., 12/01/24)'},
                     {'value': 'dd_mm_yyyy', 'label': 'DD/MM/YYYY (e.g., 12/01/2024)'}
+                ]
+            },
+            {
+                'name': 'font_size',
+                'label': 'Font Size',
+                'type': 'select',
+                'default': 'medium',
+                'options': [
+                    {'value': 'small', 'label': 'Small (3x5)'},
+                    {'value': 'medium', 'label': 'Medium (5x7)'}
+                    # Add other sizes if desired for DateWidget in the future
                 ]
             }
             # The old free-text 'date_format' can be removed or deprecated if desired

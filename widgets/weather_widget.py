@@ -42,6 +42,7 @@ class WeatherWidget(BaseWidget):
         self.time_display_format = self.config.get('time_display_format', '%H:%M') # For sunrise/sunset
         # New: User-defined format string for the display
         self.display_format = self.config.get('display_format', 'Temp: {temp}{unit_symbol}')
+        self.font_size = self.config.get('font_size', "medium") # Add font_size
 
     def get_content(self) -> str:
         """Fetches weather data and formats it using the user-defined display_format string."""
@@ -172,5 +173,16 @@ class WeatherWidget(BaseWidget):
                 'default': 'Temp: {temp}{unit_symbol}',
                 'placeholder': 'E.g., {temp}{unit_symbol} {weather_desc}',
                 'description': 'Placeholders: {temp}, {unit_symbol}, {sunrise_time}, {sunset_time}, {wind_speed}, {wind_unit}, {weather_desc}, {temp_max}, {temp_min}, {daily_weather_desc}.'
+            },
+            {
+                'name': 'font_size',
+                'label': 'Font Size',
+                'type': 'select',
+                'default': 'medium',
+                'options': [
+                    {'value': 'small', 'label': 'Small (3x5)'},
+                    {'value': 'medium', 'label': 'Medium (5x7)'}
+                    # Add other sizes if desired for WeatherWidget in the future
+                ]
             }
         ] 
