@@ -24,7 +24,7 @@
             background-color: #20232a;
             padding: 10px 0;
             border-radius: 8px;
-            margin-bottom: 30px; /* Space between menu and matrix */
+            margin-top: 30px; /* Changed from margin-bottom to margin-top */
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         }
         nav.main-menu ul {
@@ -51,6 +51,40 @@
         nav.main-menu ul li button.active {
             background-color: #61dafb;
             color: #20232a;
+        }
+
+        .controls-panel {
+            background-color: #20232a; /* Similar to nav menu for consistency */
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px; /* Space above the matrix */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: space-around; /* Distribute items */
+            align-items: center;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            width: calc(64 * 10px + 2px); /* Match matrix width */
+            max-width: 90%; /* Prevent it from being too wide on very large screens */
+            box-sizing: border-box;
+        }
+        .control-item {
+            margin: 5px 10px; /* Spacing around each control */
+            display: flex;
+            align-items: center;
+        }
+        .control-item label {
+            color: #abb2bf; /* Lighter grey for labels */
+            margin-right: 8px; /* Space between label and input if they are separate */
+        }
+        .control-item input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        .control-item select {
+            padding: 8px;
+            border-radius: 4px;
+            background-color: #333842;
+            color: #fff;
+            border: 1px solid #444;
         }
 
         .matrix-container {
@@ -112,31 +146,23 @@
         <h1>Matrix Display Control</h1>
     </header>
 
-    <nav class="main-menu">
-        <ul>
-            <li><button id="btnHome">Previous</button></li>
-            <li><button id="btnNetConfig">Next</button></li>
-            <li><button id="btnConfigure">Configure Widgets</button></li>
-        </ul>
-    </nav>
-
-    <div style="margin-bottom: 10px;">
-        <label style="color: #ccc;">
-            <input type="checkbox" id="toggleBoundingBoxes" checked>
-            Toggle Drag/Drop
-        </label>
-    </div>
-
-    <div style="margin-bottom: 20px; display: flex; align-items: center;">
-        <label for="liveScreenSelector" style="color: #ccc; margin-right: 10px;">Active Screen:</label>
-        <select id="liveScreenSelector" style="padding: 8px; border-radius: 4px; background-color: #333842; color: #fff; border: 1px solid #444;"></select>
-    </div>
-
-    <div style="margin-bottom: 10px;">
-        <label style="color: #ccc;">
-            <input type="checkbox" id="enableScreenRotationCheckbox">
-            Enable Auto Screen Rotation
-        </label>
+    <div class="controls-panel">
+        <div class="control-item">
+            <label for="toggleBoundingBoxes" style="color: #ccc;">
+                <input type="checkbox" id="toggleBoundingBoxes" checked>
+                Toggle Drag/Drop
+            </label>
+        </div>
+        <div class="control-item" style="display: flex; align-items: center;">
+            <label for="liveScreenSelector" style="color: #ccc; margin-right: 10px;">Active Screen:</label>
+            <select id="liveScreenSelector" style="padding: 8px; border-radius: 4px; background-color: #333842; color: #fff; border: 1px solid #444;"></select>
+        </div>
+        <div class="control-item">
+            <label for="enableScreenRotationCheckbox" style="color: #ccc;">
+                <input type="checkbox" id="enableScreenRotationCheckbox">
+                Enable Auto Screen Rotation
+            </label>
+        </div>
     </div>
 
     <div class="matrix-container" id="matrixGrid">
@@ -145,6 +171,14 @@
             <!-- Draggable widget representations will be added here -->
         </div>
     </div>
+
+    <nav class="main-menu">
+        <ul>
+            <li><button id="btnHome">Previous</button></li>
+            <li><button id="btnNetConfig">Next</button></li>
+            <li><button id="btnConfigure">Configure Widgets</button></li>
+        </ul>
+    </nav>
 
     <script>
         const MATRIX_WIDTH = 64;
