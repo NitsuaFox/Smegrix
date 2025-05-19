@@ -1,0 +1,52 @@
+[
+    {
+        "enabled": true,
+        "id": "time",
+        "screen": "default",
+        "type": "time",
+        "x": 1,
+        "y": 1
+    },
+    {
+        "enabled": true,
+        "id": "date",
+        "screen": "default",
+        "type": "date",
+        "x": 17,
+        "y": 33
+    },
+    {
+        "enabled": true,
+        "id": "net_ssid_label",
+        "screen": "net_config",
+        "text": "SSID:",
+        "type": "text",
+        "x": 1,
+        "y": 1
+    },
+    {
+        "enabled": true,
+        "id": "net_ssid_value",
+        "screen": "net_config",
+        "type": "network_ssid",
+        "x": 1,
+        "y": 10
+    },
+    {
+        "enabled": true,
+        "id": "net_rssi_label",
+        "screen": "net_config",
+        "text": "RSSI:",
+        "type": "text",
+        "x": 1,
+        "y": 19
+    },
+    {
+        "enabled": true,
+        "id": "net_rssi_value",
+        "screen": "net_config",
+        "type": "network_rssi",
+        "x": 1,
+        "y": 28
+    }
+]

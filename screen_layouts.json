@@ -1,0 +1,100 @@
+{
+    "default": {
+        "display_time_seconds": 10,
+        "name": "Home Screen",
+        "widgets": [
+            {
+                "color": "#ffffff",
+                "enable_ntp": true,
+                "enabled": true,
+                "font_size": "xl",
+                "id": "default_network_ssid_5260",
+                "ntp_server_address": "pool.ntp.org",
+                "ntp_timeout": 5,
+                "time_format": "%H:%M",
+                "type": "time",
+                "x": 7,
+                "y": 24
+            },
+            {
+                "color": "#00aaff",
+                "date_format_type": "dd_mon",
+                "enabled": true,
+                "id": "default_network_ssid_2142",
+                "type": "date",
+                "x": 28,
+                "y": 1
+            }
+        ]
+    },
+    "screen_0": {
+        "display_time_seconds": 10,
+        "name": "CONFIG",
+        "widgets": [
+            {
+                "color": "#ffffff",
+                "enabled": true,
+                "id": "screen_0_network_ssid_6596",
+                "type": "network_ssid",
+                "x": 0,
+                "y": 0
+            }
+        ]
+    },
+    "screen_8563": {
+        "display_time_seconds": 10,
+        "name": "WEATHER",
+        "widgets": [
+            {
+                "color": "#ffffff",
+                "display_format": "NOW:{temp}{unit_symbol}",
+                "enabled": true,
+                "id": "Weather-Temp",
+                "location_name": "Billingham,UK",
+                "time_display_format": "%H:%M",
+                "type": "weather",
+                "units": "metric",
+                "x": 11,
+                "y": 8
+            },
+            {
+                "color": "#ff0000",
+                "enable_ntp": true,
+                "enabled": true,
+                "font_size": "small",
+                "id": "time_small",
+                "ntp_resync_interval_hours": 4,
+                "ntp_server_address": "pool.ntp.org",
+                "ntp_timeout": 5,
+                "time_format": "%H:%M",
+                "type": "time",
+                "x": 42,
+                "y": 1
+            },
+            {
+                "color": "#ffffff",
+                "display_format": "RISE:{sunrise_time}",
+                "enabled": true,
+                "id": "sunrise",
+                "location_name": "Billingham,UK",
+                "time_display_format": "%H:%M",
+                "type": "weather",
+                "units": "metric",
+                "x": 3,
+                "y": 20
+            },
+            {
+                "color": "#ffffff",
+                "display_format": "SET:{sunset_time}",
+                "enabled": true,
+                "id": "sundown",
+                "location_name": "Billingham,UK",
+                "time_display_format": "%H:%M",
+                "type": "weather",
+                "units": "metric",
+                "x": 7,
+                "y": 29
+            }
+        ]
+    }
+}

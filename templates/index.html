@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>64x64 Matrix Simulator</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column; /* Arrange children vertically */
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #282c34;
+            margin: 0;
+            font-family: sans-serif;
+            color: #fff;
+        }
+        header h1 {
+            margin-bottom: 20px;
+            color: #61dafb;
+        }
+        nav.main-menu {
+            background-color: #20232a;
+            padding: 10px 0;
+            border-radius: 8px;
+            margin-bottom: 30px; /* Space between menu and matrix */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        nav.main-menu ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+        }
+        nav.main-menu ul li {
+            margin: 0 10px;
+        }
+        nav.main-menu ul li button {
+            background-color: transparent;
+            color: #61dafb;
+            border: 1px solid #61dafb;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        nav.main-menu ul li button:hover,
+        nav.main-menu ul li button.active {
+            background-color: #61dafb;
+            color: #20232a;
+        }
+
+        .matrix-container {
+            display: grid;
+            grid-template-columns: repeat(64, 10px); 
+            grid-template-rows: repeat(64, 10px);    
+            border: 1px solid #444;
+            background-color: #000;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            position: relative; /* Added for positioning the overlay */
+        }
+        .pixel {
+            width: 10px;
+            height: 10px;
+            background-color: #000000; /* Default to black */
+            border: 1px solid #222; 
+            box-sizing: border-box;
+        }
+        /* Styles for widget overlay and draggable items */
+        #widget-overlay-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%; /* Match matrix-container */
+            height: 100%; /* Match matrix-container */
+            pointer-events: none; /* Allow clicks to pass through to matrix unless on a draggable item */
+        }
+        .draggable-widget-representation {
+            position: absolute;
+            /* width: 20px; */ /* Will be set dynamically */
+            /* height: 20px; */ /* Will be set dynamically */
+            /* background-color: rgba(0, 150, 255, 0.5); */
+            background-color: transparent;
+            border: 1px dashed #61dafb; /* Dashed border for a less 'in-your-face' look */
+            /* color: white; */
+            /* font-size: 8px; */
+            /* display: flex; */
+            /* align-items: center; */
+            /* justify-content: center; */
+            cursor: grab;
+            pointer-events: auto; /* Enable pointer events for these items */
+            box-sizing: border-box;
+            /* overflow: hidden; */
+            /* text-overflow: ellipsis; */
+            /* white-space: nowrap; */
+        }
+        .draggable-widget-representation:active {
+            cursor: grabbing;
+            z-index: 10; /* Bring to front when dragging */
+        }
+        /* CSS to hide bounding boxes when parent has a specific class */
+        #widget-overlay-container.bounding-boxes-hidden .draggable-widget-representation {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Matrix Display Control</h1>
+    </header>
+
+    <nav class="main-menu">
+        <ul>
+            <li><button id="btnHome">Previous</button></li>
+            <li><button id="btnNetConfig">Next</button></li>
+            <li><button id="btnConfigure">Configure Widgets</button></li>
+        </ul>
+    </nav>
+
+    <div style="margin-bottom: 10px;">
+        <label style="color: #ccc;">
+            <input type="checkbox" id="toggleBoundingBoxes" checked>
+            Toggle Drag/Drop
+        </label>
+    </div>
+
+    <div style="margin-bottom: 20px; display: flex; align-items: center;">
+        <label for="liveScreenSelector" style="color: #ccc; margin-right: 10px;">Active Screen:</label>
+        <select id="liveScreenSelector" style="padding: 8px; border-radius: 4px; background-color: #333842; color: #fff; border: 1px solid #444;"></select>
+    </div>
+
+    <div style="margin-bottom: 10px;">
+        <label style="color: #ccc;">
+            <input type="checkbox" id="enableScreenRotationCheckbox">
+            Enable Auto Screen Rotation
+        </label>
+    </div>
+
+    <div class="matrix-container" id="matrixGrid">
+        <!-- Pixels will be generated by JavaScript -->
+        <div id="widget-overlay-container">
+            <!-- Draggable widget representations will be added here -->
+        </div>
+    </div>
+
+    <script>
+        const MATRIX_WIDTH = 64;
+        const MATRIX_HEIGHT = 64;
+        const matrixGrid = document.getElementById('matrixGrid');
+        const menuButtons = {
+            previous: document.getElementById('btnHome'),
+            next: document.getElementById('btnNetConfig'),
+            configure: document.getElementById('btnConfigure')
+        };
+        let currentMode = 'default'; // To track the active menu item
+        const CELL_SIZE = 10; // Each cell is 10px by 10px
+
+        let currentScreenLayouts = {};
+        let jsCurrentDisplayMode = 'default'; // Mirror backend's initial display mode
+        let draggedWidgetElement = null;
+        let offsetX, offsetY;
+
+        const widgetOverlayContainer = document.getElementById('widget-overlay-container');
+        const toggleBoundingBoxesCheckbox = document.getElementById('toggleBoundingBoxes');
+        const liveScreenSelector = document.getElementById('liveScreenSelector'); // New selector
+        const enableScreenRotationCheckbox = document.getElementById('enableScreenRotationCheckbox');
+
+        let rotationTimeoutId = null;
+        let currentRotationScreenIndex = 0; // To keep track of which screen is next in rotation
+
+        // Create the grid cells
+        for (let r = 0; r < MATRIX_HEIGHT; r++) {
+            for (let c = 0; c < MATRIX_WIDTH; c++) {
+                const pixel = document.createElement('div');
+                pixel.classList.add('pixel');
+                pixel.id = `pixel-${r}-${c}`;
+                matrixGrid.appendChild(pixel);
+            }
+        }
+
+        async function fetchAndUpdateMatrix() {
+            try {
+                const response = await fetch('/api/matrix_data');
+                if (!response.ok) {
+                    console.error("Failed to fetch matrix data:", response.status);
+                    // Also render draggable widgets even if matrix data fails, as layouts might be available
+                    renderDraggableWidgets(); 
+                    return;
+                }
+                const data = await response.json();
+                
+                if (data.pixels) {
+                    jsCurrentDisplayMode = data.current_display_mode || jsCurrentDisplayMode;
+                     for (let r = 0; r < MATRIX_HEIGHT; r++) {
+                        for (let c = 0; c < MATRIX_WIDTH; c++) {
+                            const pixelElement = document.getElementById(`pixel-${r}-${c}`);
+                            if (pixelElement) {
+                                const color = data.pixels[r][c]; // color is an [R, G, B] array
+                                if (Array.isArray(color) && color.length === 3) {
+                                    pixelElement.style.backgroundColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+                                } else {
+                                    // Fallback or error handling if color data is not as expected
+                                    pixelElement.style.backgroundColor = '#000000'; // Default to black
+                                }
+                            }
+                        }
+                    }
+                } else { // Fallback for old data structure (just the array) - This path might be removable if API always returns new structure
+                     for (let r = 0; r < MATRIX_HEIGHT; r++) {
+                        for (let c = 0; c < MATRIX_WIDTH; c++) {
+                            const pixelElement = document.getElementById(`pixel-${r}-${c}`);
+                            if (pixelElement) {
+                                // Assuming old structure used 1 for on, 0 for off, and on was green
+                                if (data[r][c] === 1) { 
+                                    pixelElement.style.backgroundColor = 'rgb(0, 255, 0)'; // Green for old 'on' state
+                                } else {
+                                    pixelElement.style.backgroundColor = 'rgb(0, 0, 0)';   // Black for old 'off' state
+                                }
+                            }
+                        }
+                    }
+                }
+                // After updating pixels, ensure draggable widgets are also up-to-date
+                renderDraggableWidgets();
+
+            } catch (error) {
+                console.error("Error fetching or updating matrix:", error);
+                 renderDraggableWidgets(); // Still try to render widgets
+            }
+        }
+
+        async function fetchScreenLayouts() {
+            try {
+                const response = await fetch('/api/get_screen_layouts');
+                if (!response.ok) {
+                    console.error('Failed to fetch screen layouts:', response.status);
+                    currentScreenLayouts = {}; 
+                    return;
+                }
+                const oldLayoutsString = JSON.stringify(currentScreenLayouts);
+                currentScreenLayouts = await response.json();
+                console.log("Fetched screen layouts:", currentScreenLayouts);
+                // If layouts changed, or liveScreenSelector is empty, repopulate it.
+                if (oldLayoutsString !== JSON.stringify(currentScreenLayouts) || liveScreenSelector.options.length === 0) {
+                    populateLiveScreenSelector();
+                }
+            } catch (error) {
+                console.error('Error fetching screen layouts:', error);
+                currentScreenLayouts = {};
+                populateLiveScreenSelector(); // Attempt to populate, might show "no screens"
+            }
+        }
+
+        function renderDraggableWidgets() {
+            widgetOverlayContainer.innerHTML = ''; // Clear existing draggable widgets
+
+            // If bounding boxes are meant to be hidden by the toggle, don't render anything here.
+            // The CSS class on widgetOverlayContainer will handle hiding if elements are already there from a previous render.
+            // However, to prevent adding them to DOM pointlessly, we can check here too.
+            if (toggleBoundingBoxesCheckbox && !toggleBoundingBoxesCheckbox.checked) {
+                 // Ensure the class is set if the checkbox is unchecked initially or by script
+                widgetOverlayContainer.classList.add('bounding-boxes-hidden');
+                return; 
+            }
+            // If we are here, boxes should be visible, so remove the class if present
+            widgetOverlayContainer.classList.remove('bounding-boxes-hidden');
+
+            if (!currentScreenLayouts || !jsCurrentDisplayMode || !currentScreenLayouts[jsCurrentDisplayMode] || !currentScreenLayouts[jsCurrentDisplayMode].widgets) {
+                // console.warn(`No widgets to render for mode: ${jsCurrentDisplayMode}`, currentScreenLayouts);
+                return;
+            }
+
+            const currentWidgets = currentScreenLayouts[jsCurrentDisplayMode].widgets;
+            currentWidgets.forEach(widget => {
+                if (!widget.enabled) return;
+
+                const widgetRep = document.createElement('div');
+                widgetRep.classList.add('draggable-widget-representation');
+                widgetRep.id = `drag-widget-${widget.id}`;
+                widgetRep.dataset.widgetId = widget.id;
+                // widgetRep.textContent = widget.id.substring(0,3) + '..'; // Short ID - Removing text for cleaner look
+
+                // Position based on widget's x, y (top-left) and cell size
+                widgetRep.style.left = (widget.x * CELL_SIZE) + 'px';
+                widgetRep.style.top = (widget.y * CELL_SIZE) + 'px';
+
+                // Accurate sizing based on content and font (5x7 font, 1px char spacing)
+                // Effective character width = 5 (char) + 1 (space) = 6px
+                // Effective character height = 7px
+                const FONT_CHAR_WIDTH_PX = 5;
+                const FONT_CHAR_HEIGHT_PX = 7;
+                const CHAR_SPACING_PX = 1;
+                const EFFECTIVE_CHAR_WIDTH_GRID = FONT_CHAR_WIDTH_PX + CHAR_SPACING_PX; // in matrix cells
+                const EFFECTIVE_CHAR_HEIGHT_GRID = FONT_CHAR_HEIGHT_PX; // in matrix cells
+                
+                let widgetGridWidth = 3; // Default minimum width (e.g. 3 cells)
+                let widgetGridHeight = EFFECTIVE_CHAR_HEIGHT_GRID; // Default height (7 cells)
+
+                if (widget.type === 'text' && widget.text && widget.text.length > 0) {
+                    widgetGridWidth = (widget.text.length * EFFECTIVE_CHAR_WIDTH_GRID) - CHAR_SPACING_PX; // Subtract last spacer
+                    widgetGridHeight = EFFECTIVE_CHAR_HEIGHT_GRID;
+                    // widgetRep.title = widget.text; // Show full text on hover
+                } else if (widget.type === 'time') { // Assuming HH:MM format (5 chars)
+                    widgetGridWidth = (5 * EFFECTIVE_CHAR_WIDTH_GRID) - CHAR_SPACING_PX;
+                    widgetGridHeight = EFFECTIVE_CHAR_HEIGHT_GRID;
+                } else if (widget.type === 'date') { // Assuming MM/DD or DD/MM (5 chars)
+                    widgetGridWidth = (5 * EFFECTIVE_CHAR_WIDTH_GRID) - CHAR_SPACING_PX;
+                    widgetGridHeight = EFFECTIVE_CHAR_HEIGHT_GRID;
+                } else if (widget.type === 'network_ssid' || widget.type === 'network_rssi') {
+                    // These are dynamic. If they have a 'text' field populated by backend (e.g. actual SSID), use that.
+                    // Otherwise, use a sensible default.
+                    // For now, let's assume they might have a typical length, e.g., 8-10 chars for SSID.
+                    // This part is tricky without knowing the actual rendered text length from backend.
+                    // We can give it a moderate default size.
+                    const typicalLength = widget.text?.length || 8; // Use widget.text if available (e.g. after first fetch)
+                    widgetGridWidth = (typicalLength * EFFECTIVE_CHAR_WIDTH_GRID) - CHAR_SPACING_PX;
+                    if (widget.type === 'network_rssi' && (!widget.text || widget.text.length < 5)) { // RSSI like "-55dB"
+                         widgetGridWidth = (5 * EFFECTIVE_CHAR_WIDTH_GRID) - CHAR_SPACING_PX;
+                    }
+                    widgetGridHeight = EFFECTIVE_CHAR_HEIGHT_GRID;
+                }
+                // Ensure minimum size
+                widgetGridWidth = Math.max(1, widgetGridWidth); // min 1 cell wide
+                widgetGridHeight = Math.max(1, widgetGridHeight); // min 1 cell high
+
+
+                widgetRep.style.width = (widgetGridWidth * CELL_SIZE) + 'px';
+                widgetRep.style.height = (widgetGridHeight * CELL_SIZE) + 'px';
+                
+                // Store grid dimensions for clamping during drag if needed, or for other logic
+                widgetRep.dataset.gridWidth = widgetGridWidth;
+                widgetRep.dataset.gridHeight = widgetGridHeight;
+
+
+                widgetRep.addEventListener('mousedown', onMouseDown);
+                widgetOverlayContainer.appendChild(widgetRep);
+            });
+        }
+
+        function onMouseDown(event) {
+            if (event.button !== 0) return; // Only main mouse button
+            draggedWidgetElement = event.target.closest('.draggable-widget-representation');
+            if (!draggedWidgetElement) return;
+
+            event.preventDefault(); // Prevent text selection, etc.
+            draggedWidgetElement.style.cursor = 'grabbing';
+
+            // Calculate offset from mouse pointer to top-left of element
+            const rect = draggedWidgetElement.getBoundingClientRect();
+            const overlayRect = widgetOverlayContainer.getBoundingClientRect();
+            offsetX = event.clientX - rect.left;
+            offsetY = event.clientY - rect.top;
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp, { once: true }); // { once: true } automatically removes listener
+        }
+
+        function onMouseMove(event) {
+            if (!draggedWidgetElement) return;
+
+            const overlayRect = widgetOverlayContainer.getBoundingClientRect();
+            let newLeft = event.clientX - offsetX - overlayRect.left;
+            let newTop = event.clientY - offsetY - overlayRect.top;
+
+            // Constrain to overlay bounds (optional, but good for UX)
+            newLeft = Math.max(0, Math.min(newLeft, overlayRect.width - draggedWidgetElement.offsetWidth));
+            newTop = Math.max(0, Math.min(newTop, overlayRect.height - draggedWidgetElement.offsetHeight));
+
+            draggedWidgetElement.style.left = newLeft + 'px';
+            draggedWidgetElement.style.top = newTop + 'px';
+        }
+
+        async function onMouseUp(event) {
+            if (!draggedWidgetElement) return;
+            draggedWidgetElement.style.cursor = 'grab';
+
+            const widgetId = draggedWidgetElement.dataset.widgetId;
+            
+            // Calculate grid cell based on the center of the dragged element for better snap
+            const finalPixelX = parseFloat(draggedWidgetElement.style.left) + (draggedWidgetElement.offsetWidth / 2);
+            const finalPixelY = parseFloat(draggedWidgetElement.style.top) + (draggedWidgetElement.offsetHeight / 2);
+
+            let gridX = Math.round(finalPixelX / CELL_SIZE);
+            let gridY = Math.round(finalPixelY / CELL_SIZE);
+
+            // Clamp to matrix boundaries (0 to 63 for a 64x64 matrix)
+            // Widget X,Y is top-left, so it should not make part of widget go off screen.
+            // For simplicity, let's use the calculated X,Y as top-left and clamp.
+            gridX = Math.max(0, Math.min(gridX, MATRIX_WIDTH - 1));
+            gridY = Math.max(0, Math.min(gridY, MATRIX_HEIGHT - 1));
+            
+            // Snap visual element to grid
+            draggedWidgetElement.style.left = (gridX * CELL_SIZE) + 'px';
+            draggedWidgetElement.style.top = (gridY * CELL_SIZE) + 'px';
+
+            // Update the layout object
+            if (currentScreenLayouts && currentScreenLayouts[jsCurrentDisplayMode] && currentScreenLayouts[jsCurrentDisplayMode].widgets) {
+                const widgetToUpdate = currentScreenLayouts[jsCurrentDisplayMode].widgets.find(w => w.id === widgetId);
+                if (widgetToUpdate) {
+                    widgetToUpdate.x = gridX;
+                    widgetToUpdate.y = gridY;
+                    console.log(`Widget ${widgetId} new position: X=${gridX}, Y=${gridY}`);
+                    await saveUpdatedLayouts(); // Save and refresh
+                }
+            }
+            
+            document.removeEventListener('mousemove', onMouseMove);
+            // mouseup listener is already removed due to { once: true }
+            draggedWidgetElement = null;
+        }
+
+        async function saveUpdatedLayouts() {
+            try {
+                const response = await fetch('/api/save_screen_layouts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentScreenLayouts),
+                });
+                if (!response.ok) {
+                    const errorResult = await response.json();
+                    throw new Error(errorResult.message || 'Failed to save layouts on backend');
+                }
+                const result = await response.json();
+                if (result.success) {
+                    console.log('Layouts saved successfully via drag-drop.');
+                    // Fetch matrix data again to show the change reflected from backend
+                    await fetchAndUpdateMatrix(); 
+                } else {
+                    throw new Error(result.message || 'Backend reported save failure.');
+                }
+            } catch (error) {
+                console.error('Error saving layouts:', error);
+                // Optionally, display a user-facing error message
+                // alert(`Error saving widget position: ${error.message}`);
+                // Re-fetch layouts to revert to last known good state from server?
+                // await fetchScreenLayoutsAndRenderAll(); // This might be too disruptive
+            }
+        }
+        
+        function updateMenuButtons(activeMode) {
+            jsCurrentDisplayMode = activeMode; // Ensure our JS variable for current screen is up to date
+            
+            // Clear active state from all main menu buttons initially
+            // The concept of a single 'active' button in the main nav (Prev/Next/Configure) is less direct now.
+            // 'Configure Widgets' is a navigation, not a display mode itself.
+            // Prev/Next change the mode, which is reflected in liveScreenSelector.
+            [menuButtons.previous, menuButtons.next, menuButtons.configure].forEach(button => {
+                if (button) button.classList.remove('active');
+            });
+
+            // Optional: If you want to highlight 'Configure Widgets' if on /config page (though user is on index.html here)
+            // This function is primarily for index.html state based on jsCurrentDisplayMode.
+
+            // Update the live screen selector as well
+            if (liveScreenSelector) {
+                liveScreenSelector.value = activeMode;
+            }
+        }
+
+        async function setDisplayMode(mode, isAutoRotation = false) {
+            try {
+                // If rotation is active and this is a manual change, stop rotation.
+                if (rotationTimeoutId && !isAutoRotation) {
+                    stopScreenRotation();
+                    enableScreenRotationCheckbox.checked = false;
+                }
+
+                const response = await fetch(`/api/set_display_mode/${mode}`, { method: 'POST' });
+                if (!response.ok) {
+                    console.error(`Failed to set display mode to ${mode}:`, response.status);
+                    return;
+                }
+                console.log(`Display mode set to ${mode}`);
+                updateMenuButtons(mode); // This will update jsCurrentDisplayMode and liveScreenSelector
+                await fetchAndUpdateMatrix(); 
+                await fetchScreenLayouts(); 
+                renderDraggableWidgets(); 
+            } catch (error) {
+                console.error(`Error setting display mode to ${mode}:`, error);
+            }
+        }
+
+        if (menuButtons.previous) {
+            menuButtons.previous.addEventListener('click', () => {
+                if (enableScreenRotationCheckbox.checked) { // Stop rotation on manual navigation
+                    stopScreenRotation();
+                    enableScreenRotationCheckbox.checked = false;
+                }
+                const screenIds = Object.keys(currentScreenLayouts).sort();
+                if (screenIds.length === 0) return;
+                let currentIndex = screenIds.indexOf(jsCurrentDisplayMode);
+                if (currentIndex === -1) currentIndex = 0; // Fallback if current mode not found
+                const newIndex = (currentIndex - 1 + screenIds.length) % screenIds.length;
+                setDisplayMode(screenIds[newIndex]);
+            });
+        }
+
+        if (menuButtons.next) {
+            menuButtons.next.addEventListener('click', () => {
+                if (enableScreenRotationCheckbox.checked) { // Stop rotation on manual navigation
+                    stopScreenRotation();
+                    enableScreenRotationCheckbox.checked = false;
+                }
+                const screenIds = Object.keys(currentScreenLayouts).sort();
+                if (screenIds.length === 0) return;
+                let currentIndex = screenIds.indexOf(jsCurrentDisplayMode);
+                if (currentIndex === -1) currentIndex = 0; // Fallback
+                const newIndex = (currentIndex + 1) % screenIds.length;
+                setDisplayMode(screenIds[newIndex]);
+            });
+        }
+
+        if (menuButtons.configure) {
+            menuButtons.configure.addEventListener('click', () => {
+                window.location.href = '/config';
+            });
+        }
+
+        // Function to populate the new live screen selector
+        function populateLiveScreenSelector() {
+            if (!liveScreenSelector) return;
+            const previousSelectedValue = liveScreenSelector.value;
+            liveScreenSelector.innerHTML = ''; // Clear existing options
+
+            const screenIds = Object.keys(currentScreenLayouts);
+            if (screenIds.length === 0) {
+                const option = document.createElement('option');
+                option.textContent = "No screens available";
+                option.disabled = true;
+                liveScreenSelector.appendChild(option);
+                return;
+            }
+
+            screenIds.sort().forEach(screenId => {
+                const option = document.createElement('option');
+                option.value = screenId;
+                option.textContent = currentScreenLayouts[screenId].name || screenId;
+                liveScreenSelector.appendChild(option);
+            });
+
+            // Try to reselect previous value or current display mode, or first available
+            if (currentScreenLayouts[jsCurrentDisplayMode]) {
+                liveScreenSelector.value = jsCurrentDisplayMode;
+            } else if (currentScreenLayouts[previousSelectedValue]) {
+                liveScreenSelector.value = previousSelectedValue;
+            } else if (screenIds.length > 0) {
+                liveScreenSelector.value = screenIds[0];
+                // If we had to pick the first, and it's different from jsCurrentDisplayMode, update jsCurrentDisplayMode.
+                // However, setDisplayMode should be the single source of truth for changing modes.
+                // This will be handled because updateMenuButtons called by setDisplayMode will update liveScreenSelector.value.
+            }
+        }
+
+        // Event listener for the new live screen selector
+        if (liveScreenSelector) {
+            liveScreenSelector.addEventListener('change', (event) => {
+                const selectedMode = event.target.value;
+                if (selectedMode && currentScreenLayouts[selectedMode]) {
+                    setDisplayMode(selectedMode); // Manual change, rotation will be stopped if active
+                }
+            });
+        }
+
+        function manageRotationControls(isRotating) {
+            if (liveScreenSelector) liveScreenSelector.disabled = isRotating;
+            if (menuButtons.previous) menuButtons.previous.disabled = isRotating;
+            if (menuButtons.next) menuButtons.next.disabled = isRotating;
+        }
+
+        function scheduleNextScreen(screenIds, currentIndex) {
+            if (!enableScreenRotationCheckbox.checked || screenIds.length < 2) {
+                stopScreenRotation(); // Stop if checkbox unchecked or not enough screens
+                return;
+            }
+
+            const nextIndex = (currentIndex + 1) % screenIds.length;
+            const nextScreenId = screenIds[nextIndex];
+            const currentScreenConfig = currentScreenLayouts[jsCurrentDisplayMode]; // Get current screen for its display time
+            
+            if (!currentScreenConfig || !currentScreenConfig.display_time_seconds) {
+                console.warn(`Screen ${jsCurrentDisplayMode} has no valid display_time_seconds. Stopping rotation.`);
+                stopScreenRotation();
+                enableScreenRotationCheckbox.checked = false;
+                return;
+            }
+            
+            const displayTimeMs = currentScreenConfig.display_time_seconds * 1000;
+
+            rotationTimeoutId = setTimeout(async () => {
+                if (!enableScreenRotationCheckbox.checked) { // Re-check before switching
+                    stopScreenRotation();
+                    return;
+                }
+                currentRotationScreenIndex = nextIndex; // Update before setting mode for next schedule
+                await setDisplayMode(nextScreenId, true); // true indicates it's an auto-rotation change
+                scheduleNextScreen(screenIds, nextIndex); // Schedule the *next* one after this one is set
+            }, displayTimeMs);
+        }
+
+        function startScreenRotation() {
+            if (rotationTimeoutId) {
+                clearTimeout(rotationTimeoutId);
+                rotationTimeoutId = null;
+            }
+            manageRotationControls(true);
+
+            const screenIds = Object.keys(currentScreenLayouts).sort();
+            if (screenIds.length < 2) {
+                displayMessage('Need at least 2 screens to start rotation.', 'error');
+                enableScreenRotationCheckbox.checked = false;
+                manageRotationControls(false);
+                return;
+            }
+            
+            // Determine starting point: current screen or first in list
+            let startIndex = screenIds.indexOf(jsCurrentDisplayMode);
+            if (startIndex === -1) {
+                startIndex = 0; // Default to first screen if current isn't in the list (e.g., after a delete)
+                jsCurrentDisplayMode = screenIds[0];
+            }
+            currentRotationScreenIndex = startIndex;
+            
+            // Immediately display the first screen in sequence if not already displayed, or just schedule next if it is.
+            // For simplicity, let's ensure the current is set and then schedule its successor.
+            setDisplayMode(jsCurrentDisplayMode, true).then(() => {
+                 // Pass currentRotationScreenIndex which is already set to the index of jsCurrentDisplayMode
+                scheduleNextScreen(screenIds, currentRotationScreenIndex); 
+            });
+        }
+
+        function stopScreenRotation() {
+            if (rotationTimeoutId) {
+                clearTimeout(rotationTimeoutId);
+                rotationTimeoutId = null;
+            }
+            manageRotationControls(false);
+            console.log("Screen rotation stopped.");
+        }
+
+        if (enableScreenRotationCheckbox) {
+            enableScreenRotationCheckbox.addEventListener('change', () => {
+                if (enableScreenRotationCheckbox.checked) {
+                    startScreenRotation();
+                } else {
+                    stopScreenRotation();
+                }
+            });
+        }
+
+        // Initial setup
+        async function initializeSimulator() {
+            await fetchScreenLayouts(); // Fetches layouts, and calls populateLiveScreenSelector if needed
+            
+            // Set initial state of bounding boxes based on checkbox
+            if (toggleBoundingBoxesCheckbox) {
+                if (toggleBoundingBoxesCheckbox.checked) {
+                    widgetOverlayContainer.classList.remove('bounding-boxes-hidden');
+                } else {
+                    widgetOverlayContainer.classList.add('bounding-boxes-hidden');
+                }
+            }
+
+            await fetchAndUpdateMatrix(); 
+            updateMenuButtons(jsCurrentDisplayMode); 
+            setInterval(async () => {
+                await fetchAndUpdateMatrix(); 
+            }, 1000);
+        }
+
+        // Event listener for the toggle
+        if (toggleBoundingBoxesCheckbox) {
+            toggleBoundingBoxesCheckbox.addEventListener('change', () => {
+                if (toggleBoundingBoxesCheckbox.checked) {
+                    widgetOverlayContainer.classList.remove('bounding-boxes-hidden');
+                    renderDraggableWidgets(); // Re-render to show them
+                } else {
+                    widgetOverlayContainer.classList.add('bounding-boxes-hidden');
+                    // No need to re-render, CSS will hide them. 
+                    // If you want to clear them from DOM too, you can call widgetOverlayContainer.innerHTML = '';
+                }
+            });
+        }
+
+        initializeSimulator();
+    </script>
+</body>
+</html> 

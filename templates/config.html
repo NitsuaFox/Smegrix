@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Configure Screen Layouts - Matrix Simulator</title>
+    <style>
+        :root {
+            --primary-color: #61dafb;
+            --primary-hover: #52c5e7;
+            --bg-color: #282c34;
+            --container-bg: #20232a;
+            --input-bg: #333842;
+            --text-color: #fff;
+            --text-secondary: #ccc;
+            --border-color: #444;
+            --success-color: #28a745;
+            --error-color: #dc3545;
+            --delete-color: #f44336;
+            --add-color: #4CAF50;
+            --cancel-color: #777;
+        }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.5;
+        }
+        h1, h2 {
+            color: var(--primary-color);
+        }
+        .container {
+            background-color: var(--container-bg);
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .widget-config {
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            background-color: var(--bg-color);
+            transition: all 0.2s ease;
+        }
+        .widget-config:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .widget-config h3 {
+            margin-top: 0;
+            color: var(--primary-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        input[type="text"], input[type="number"], select {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, input[type="number"]:focus, select:focus {
+            border-color: var(--primary-color);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(97, 218, 251, 0.25);
+        }
+        input[type="checkbox"] {
+            margin-right: 5px;
+            vertical-align: middle;
+            transform: scale(1.2);
+        }
+        .controls {
+            margin-top: 20px;
+            text-align: right;
+        }
+        button {
+            background-color: var(--primary-color);
+            color: var(--container-bg);
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        button:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+        button:active {
+            transform: translateY(1px);
+        }
+        a {
+            color: var(--primary-color);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        a:hover {
+            text-decoration: underline;
+            color: var(--primary-hover);
+        }
+        .message {
+            padding: 10px;
+            margin-top: 15px;
+            border-radius: 5px;
+            text-align: center;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message.success {
+            background-color: var(--success-color);
+            color: white;
+        }
+        .message.error {
+            background-color: var(--error-color);
+            color: white;
+        }
+        #screenSelectorContainer {
+            margin-bottom: 20px;
+        }
+        #screenManagementContainer button {
+            margin-left: 10px;
+        }
+        .modal {
+            display: none;
+            position: fixed; 
+            z-index: 1000; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.6);
+            animation: fadeIn 0.2s;
+        }
+        .modal-content {
+            background-color: #2c303a;
+            margin: 10% auto; 
+            padding: 25px;
+            border: 1px solid #555;
+            width: 90%; 
+            max-width: 500px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .modal-content h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+        }
+        .modal-content label {
+            color: #ddd;
+        }
+        .modal-content input[type="text"], .modal-content select {
+            background-color: #3b3f48;
+            border-color: #555;
+            width: 100%;
+        }
+        .modal-controls {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+        .modal-controls button {
+            margin-left: 10px;
+        }
+        
+        /* Responsive styles */
+        @media (max-width: 768px) {
+            body {
+                padding: 5px;
+            }
+            .container {
+                padding: 15px;
+                border-radius: 0;
+            }
+            button {
+                padding: 10px 15px;
+                font-size: 14px;
+                width: 100%;
+                margin: 5px 0;
+            }
+            #screenManagementContainer {
+                flex-direction: column;
+            }
+            #screenManagementContainer button {
+                margin: 5px 0 !important;
+            }
+            .modal-content {
+                margin: 20% auto 0;
+                width: 95%;
+                padding: 20px;
+            }
+            .controls {
+                display: flex;
+                flex-direction: column;
+            }
+            .controls button {
+                margin: 5px 0;
+            }
+            .modal-controls {
+                flex-direction: column;
+            }
+            .modal-controls button {
+                margin: 5px 0;
+            }
+        }
+        
+        /* Styles for multi-column widget display on larger screens */
+        @media (min-width: 992px) {
+            #widgets-flex-container {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: flex-start;
+                gap: 2%;
+            }
+            #widgets-flex-container > .widget-config {
+                flex-basis: 48%;
+                box-sizing: border-box;
+            }
+        }
+        @media (min-width: 1200px) {
+             #widgets-flex-container > .widget-config {
+                flex-basis: 31.33%;
+            }
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .widget-controls {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 15px;
+        }
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .input-group label {
+            margin: 0;
+            min-width: 100px;
+        }
+        .input-group input[type="number"] {
+            width: 100px;
+            margin-bottom: 0;
+        }
+        .btn-delete {
+            background-color: var(--delete-color);
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            background-color: var(--primary-color);
+            color: var(--container-bg);
+            margin-left: 8px;
+        }
+        .widget-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+        /* Spinner and loading styles */
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            flex-direction: column;
+            color: white;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        .loading-overlay.active {
+            visibility: visible;
+            opacity: 1;
+        }
+        .loading-overlay .spinner {
+            width: 50px;
+            height: 50px;
+            border-width: 5px;
+            margin-bottom: 20px;
+        }
+        .loading-message {
+            font-size: 18px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Configure Screen Layouts</h1>
+        <p><a href="/">&laquo; Back to Simulator</a></p>
+
+        <div id="screenManagementContainer" style="background-color: var(--bg-color); padding: 15px; border-radius: 5px; margin-bottom: 20px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;">
+            <h3 style="margin:0; color: var(--primary-color); flex: 1 1 auto; margin-bottom: 10px;">Screen Management</h3>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                <button type="button" id="addNewScreenButton" style="background-color: var(--add-color);">Add New Screen</button>
+                <button type="button" id="removeSelectedScreenButton" style="background-color: var(--delete-color);">Remove Selected Screen</button>
+            </div>
+        </div>
+
+        <div id="screenSelectorContainer" style="background-color: var(--bg-color); padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <label for="screenSelector" style="font-weight: bold; color: var(--text-color); margin-bottom: 10px;">Select Screen to Configure:</label>
+            <select id="screenSelector" style="width: 100%; max-width: 400px;"></select>
+        </div>
+        
+        <form id="widgetsForm">
+            <h2 id="currentScreenName" style="text-align: center; padding-bottom: 10px; border-bottom: 1px solid var(--border-color);"></h2>
+            <div id="widget-list-container">
+                <p>Select a screen to see its widgets.</p>
+            </div>
+
+            <div class="controls">
+                <button type="button" id="addNewWidgetButton" style="margin-right:10px; background-color: var(--add-color);">Add New Widget to this Screen</button>
+                <button type="submit" id="saveAllConfigsButton">Save All Layouts</button>
+            </div>
+        </form>
+        <div id="message-area"></div>
+    </div>
+
+    <!-- Add Widget Modal HTML -->
+    <div id="addWidgetModal" class="modal">
+        <div class="modal-content">
+            <h3>Add New Widget</h3>
+            <div class="form-group">
+                <label for="newWidgetTypeSelect">Widget Type:</label>
+                <select id="newWidgetTypeSelect"></select>
+            </div>
+
+            <div class="form-group">
+                <label for="newWidgetIdInput">Widget ID:</label>
+                <input type="text" id="newWidgetIdInput" placeholder="E.g., my_time_widget">
+                <small style="display:block; margin-bottom:10px; color:#aaa;">Must be unique for the current screen.</small>
+            </div>
+            
+            <div class="modal-controls">
+                <button type="button" id="cancelAddWidgetBtn" style="background-color:var(--cancel-color);">Cancel</button>
+                <button type="button" id="confirmAddWidgetBtn">Add Widget</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Screen Modal HTML -->
+    <div id="addScreenModal" class="modal">
+        <div class="modal-content">
+            <h3>Add New Screen</h3>
+            <div class="form-group">
+                <label for="newScreenIdInput">Screen ID:</label>
+                <input type="text" id="newScreenIdInput" placeholder="E.g., living_room_display">
+                <small style="display:block; margin-bottom:10px; color:#aaa;">Unique identifier (letters, numbers, _, -).</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="newScreenNameInput">Screen Name:</label>
+                <input type="text" id="newScreenNameInput" placeholder="E.g., Living Room Display">
+            </div>
+            
+            <div class="modal-controls">
+                <button type="button" id="cancelAddScreenBtn" style="background-color:var(--cancel-color);">Cancel</button>
+                <button type="button" id="confirmAddScreenBtn">Add Screen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-message">Processing, please wait...</div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const screenSelector = document.getElementById('screenSelector');
+            const currentScreenNameHeader = document.getElementById('currentScreenName');
+            const widgetListContainer = document.getElementById('widget-list-container');
+            const form = document.getElementById('widgetsForm');
+            const messageArea = document.getElementById('message-area');
+            const addNewWidgetButton = document.getElementById('addNewWidgetButton');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+
+            // Modal elements
+            const addWidgetModal = document.getElementById('addWidgetModal');
+            const newWidgetTypeSelect = document.getElementById('newWidgetTypeSelect');
+            const newWidgetIdInput = document.getElementById('newWidgetIdInput');
+            const confirmAddWidgetBtn = document.getElementById('confirmAddWidgetBtn');
+            const cancelAddWidgetBtn = document.getElementById('cancelAddWidgetBtn');
+
+            // Screen Management elements
+            const addNewScreenButton = document.getElementById('addNewScreenButton');
+            const removeSelectedScreenButton = document.getElementById('removeSelectedScreenButton');
+            const addScreenModal = document.getElementById('addScreenModal');
+            const newScreenIdInput = document.getElementById('newScreenIdInput');
+            const newScreenNameInput = document.getElementById('newScreenNameInput');
+            const confirmAddScreenBtn = document.getElementById('confirmAddScreenBtn');
+            const cancelAddScreenBtn = document.getElementById('cancelAddScreenBtn');
+
+            let screenLayouts = {}; // Holds the entire configuration object
+            let selectedScreenId = null;
+            let availableWidgetTypes = []; // To store fetched widget type definitions
+
+            function displayMessage(message, type) {
+                messageArea.innerHTML = `<div class="message ${type}">${message}</div>`;
+                setTimeout(() => { messageArea.innerHTML = '' }, 3000);
+            }
+
+            // Debug helper function to dump widget information to console
+            function debugDumpWidgets() {
+                if (!selectedScreenId || !screenLayouts[selectedScreenId]) {
+                    console.log('No screen selected or no layout data');
+                    return;
+                }
+                
+                console.group('Current Widget Data');
+                console.log('Screen ID:', selectedScreenId);
+                screenLayouts[selectedScreenId].widgets.forEach((widget, i) => {
+                    console.log(`Widget ${i+1}:`, widget);
+                });
+                console.groupEnd();
+            }
+            
+            // Expose debug function globally
+            window.debugDumpWidgets = debugDumpWidgets;
+
+            function renderWidgetInstanceAndReturn(widget, screenId, widgetIndex) {
+                const widgetDiv = document.createElement('div');
+                widgetDiv.classList.add('widget-config');
+                widgetDiv.dataset.widgetId = widget.id;
+                widgetDiv.dataset.widgetType = widget.type;
+                widgetDiv.dataset.widgetIndex = widgetIndex;
+                
+                const baseName = `s_${screenId}_w_${widget.id.replace(/\W/g, '_')}_idx${widgetIndex}`;
+
+                let configFieldsHTML = '';
+                const widgetDefinition = availableWidgetTypes.find(p => p.type === widget.type);
+
+                if (widgetDefinition && widgetDefinition.configOptions) {
+                    widgetDefinition.configOptions.forEach(option => {
+                        const fieldId = `${baseName}_${option.name}`;
+                        const currentValue = widget[option.name] !== undefined ? widget[option.name] : option.default;
+                        
+                        configFieldsHTML += `<div class="form-group">
+                            <label for="${fieldId}">${option.label || option.name}:</label>`;
+                        
+                        if (option.type === 'text' || option.type === 'string') {
+                            configFieldsHTML += `<input type="text" id="${fieldId}" name="${fieldId}" class="widget-config-input" data-config-key="${option.name}" value="${escapeHtml(currentValue)}" placeholder="${escapeHtml(option.placeholder || '')}">`;
+                        } else if (option.type === 'number') {
+                            configFieldsHTML += `<input type="number" id="${fieldId}" name="${fieldId}" class="widget-config-input" data-config-key="${option.name}" value="${currentValue}" placeholder="${escapeHtml(option.placeholder || '')}">`;
+                        } else if (option.type === 'checkbox') {
+                            configFieldsHTML += `<input type="checkbox" id="${fieldId}" name="${fieldId}" class="widget-config-input" data-config-key="${option.name}" ${currentValue ? 'checked' : ''}>`;
+                        } else if (option.type === 'select') {
+                            configFieldsHTML += `<select id="${fieldId}" name="${fieldId}" class="widget-config-input" data-config-key="${option.name}">`;
+                            if (option.options && Array.isArray(option.options)) {
+                                option.options.forEach(opt => {
+                                    const isSelected = String(currentValue) === String(opt.value);
+                                    configFieldsHTML += `<option value="${escapeHtml(opt.value)}" ${isSelected ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`;
+                                });
+                            }
+                            configFieldsHTML += `</select>`;
+                        } else {
+                             configFieldsHTML += `<input type="text" id="${fieldId}" name="${fieldId}" class="widget-config-input" data-config-key="${option.name}" value="${escapeHtml(currentValue)}" placeholder="Unknown type: ${escapeHtml(option.type)}">`;
+                             console.warn(`Unknown config option type: ${option.type} for ${option.name}`);
+                        }
+                        configFieldsHTML += `</div>`;
+                        // Add description if present
+                        if (option.description) {
+                            configFieldsHTML += `<small style="display:block; margin-bottom:10px; color:#aaa;">${escapeHtml(option.description)}</small>`;
+                        }
+                    });
+                }
+
+                widgetDiv.innerHTML = `
+                    <div class="widget-header">
+                        <h3>${widget.id} <span class="badge">${widget.type}</span></h3>
+                    </div>
+                    <input type="hidden" name="${baseName}_id_val" value="${widget.id}">
+                    <input type="hidden" name="${baseName}_type_val" value="${widget.type}">
+
+                    <div class="input-group">
+                        <label for="${baseName}_x">X Position:</label>
+                        <input type="number" class="widget-x-input" id="${baseName}_x" name="${baseName}_x" value="${widget.x || 0}" required>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="${baseName}_y">Y Position:</label>
+                        <input type="number" class="widget-y-input" id="${baseName}_y" name="${baseName}_y" value="${widget.y || 0}" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="${baseName}_color">Color:</label>
+                        <input type="color" class="widget-color-input" id="${baseName}_color" name="${baseName}_color" value="${widget.color || '#FFFFFF'}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="${baseName}_enabled">
+                            <input type="checkbox" class="widget-enabled-input" id="${baseName}_enabled" name="${baseName}_enabled" ${widget.enabled ? 'checked' : ''}>
+                            Enabled
+                        </label>
+                    </div>
+                    
+                    ${configFieldsHTML}
+                    <div class="widget-controls">
+                        <button type="button" class="removeWidgetBtn btn-delete" data-screen-id="${screenId}" data-widget-id="${widget.id}">Remove Widget</button>
+                    </div>
+                `;
+                widgetDiv.querySelector('.removeWidgetBtn').addEventListener('click', function() {
+                    removeWidgetInstance(this.dataset.screenId, this.dataset.widgetId);
+                });
+                return widgetDiv;
+            }
+
+            // Helper function to escape HTML to prevent XSS when rendering values
+            function escapeHtml(unsafe) {
+                if (unsafe === null || unsafe === undefined) return '';
+                return String(unsafe)
+                     .replace(/&/g, "&amp;")
+                     .replace(/</g, "&lt;")
+                     .replace(/>/g, "&gt;")
+                     .replace(/"/g, "&quot;")
+                     .replace(/'/g, "&#039;");
+            }
+
+            function renderScreenWidgets(screenId) {
+                selectedScreenId = screenId;
+                widgetListContainer.innerHTML = ''; // Clear previous content
+                currentScreenNameHeader.innerHTML = ''; // Clear the old h2 header
+
+                if (!screenId || !screenLayouts[screenId]) { 
+                    currentScreenNameHeader.textContent = 'No Screen Selected';
+                    widgetListContainer.innerHTML = '<p>Please select a screen to configure, or add a new one if none exist.</p>';
+                    addNewWidgetButton.disabled = true; 
+                    return;
+                }
+                addNewWidgetButton.disabled = false;
+
+                // --- Screen Configuration Section ---
+                const screenSettingsDiv = document.createElement('div');
+                screenSettingsDiv.classList.add('widget-config'); // Reuse styling
+                screenSettingsDiv.id = `screen-settings-${screenId}`;
+                screenSettingsDiv.innerHTML = `
+                    <div class="widget-header">
+                        <h3>Screen Settings <span class="badge">${screenId}</span></h3>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="currentScreenNameInput_${screenId}">Screen Name:</label>
+                        <input type="text" id="currentScreenNameInput_${screenId}" value="${screenLayouts[screenId].name || ''}" placeholder="Display name for this screen">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="screenDisplayTime_${screenId}">Display Time:</label>
+                        <input type="number" id="screenDisplayTime_${screenId}" 
+                               value="${screenLayouts[screenId].display_time_seconds || 10}" 
+                               min="1" step="1" required>
+                        <span>seconds</span>
+                    </div>
+                `;
+                widgetListContainer.appendChild(screenSettingsDiv);
+
+                // --- Widgets Section ---
+                const widgetsHeader = document.createElement('h3');
+                widgetsHeader.textContent = "Widgets on this Screen";
+                widgetsHeader.style.marginTop = "30px";
+                widgetsHeader.style.color = "#61dafb";
+                widgetListContainer.appendChild(widgetsHeader);
+
+                // Create a flex container for the widgets themselves
+                const widgetsFlexContainer = document.createElement('div');
+                widgetsFlexContainer.id = 'widgets-flex-container';
+                widgetListContainer.appendChild(widgetsFlexContainer);
+
+                if (!screenLayouts[screenId].widgets || screenLayouts[screenId].widgets.length === 0) {
+                    const noWidgetsMsg = document.createElement('p');
+                    noWidgetsMsg.textContent = 'No widgets configured for this screen yet.';
+                    widgetsFlexContainer.appendChild(noWidgetsMsg); 
+                } else {
+                    screenLayouts[screenId].widgets.forEach((widget, index) => {
+                        const widgetDiv = renderWidgetInstanceAndReturn(widget, screenId, index);
+                        if(widgetDiv) widgetsFlexContainer.appendChild(widgetDiv);
+                    });
+                }
+            }
+
+            function populateScreenSelector() {
+                screenSelector.innerHTML = '';
+                let firstScreenId = null;
+                const screenIds = Object.keys(screenLayouts);
+
+                if (screenIds.length === 0) {
+                    const option = document.createElement('option');
+                    option.textContent = "No screens configured";
+                    option.disabled = true;
+                    screenSelector.appendChild(option);
+                    selectedScreenId = null; // Ensure no screen is considered selected
+                    renderScreenWidgets(null); // Clear widget display
+                    removeSelectedScreenButton.disabled = true; // Disable remove screen button
+                    addNewWidgetButton.disabled = true; // Disable add widget button
+                    return;
+                }
+                removeSelectedScreenButton.disabled = false; // Enable remove screen button
+                addNewWidgetButton.disabled = true; // Will be enabled by renderScreenWidgets if a screen is selected
+
+                screenIds.sort().forEach(screenId => { // Sort for consistent order
+                    if (!firstScreenId) firstScreenId = screenId;
+                    const option = document.createElement('option');
+                    option.value = screenId;
+                    option.textContent = screenLayouts[screenId].name || screenId;
+                    screenSelector.appendChild(option);
+                });
+
+                if (selectedScreenId && screenLayouts[selectedScreenId]) {
+                    screenSelector.value = selectedScreenId; // Try to keep current selection
+                } else if (firstScreenId) {
+                    screenSelector.value = firstScreenId;
+                } else {
+                    selectedScreenId = null; // Should be covered by screenIds.length === 0
+                }
+                renderScreenWidgets(screenSelector.value); // Render widgets for the selected (or first) screen
+            }
+
+            function showLoading(message = 'Processing, please wait...') {
+                document.querySelector('.loading-message').textContent = message;
+                loadingOverlay.classList.add('active');
+                
+                // Add a safety timeout to ensure the loading overlay doesn't get stuck
+                setTimeout(() => {
+                    if (loadingOverlay.classList.contains('active')) {
+                        console.warn('Loading overlay stuck - forcing hide after timeout');
+                        hideLoading();
+                        displayMessage('Operation timed out. Please try again.', 'error');
+                    }
+                }, 8000); // 8 second timeout
+            }
+
+            function hideLoading() {
+                console.log('Hiding loading overlay');
+                loadingOverlay.classList.remove('active');
+            }
+
+            // Debug helper function to check for stuck UI state
+            function debugCheckLoadingState() {
+                if (loadingOverlay.classList.contains('active')) {
+                    console.warn('MANUAL DEBUG: Loading overlay is active - forcing hide');
+                    loadingOverlay.classList.remove('active');
+                    displayMessage('Loading state manually cleared', 'info');
+                    return true;
+                }
+                return false;
+            }
+            
+            // Expose debug function globally
+            window.debugFixLoadingState = debugCheckLoadingState;
+            
+            // Add debug key listener (press ESC to force clear loading state)
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    debugCheckLoadingState();
+                }
+            });
+
+            async function fetchWidgetTypes() {
+                try {
+                    // showLoading('Loading widget types...'); // Optional: if it takes time
+                    const response = await fetch('/api/get_widget_types');
+                    if (!response.ok) throw new Error('Failed to fetch widget types');
+                    availableWidgetTypes = await response.json();
+                    console.log('Available widget types loaded:', availableWidgetTypes);
+                    // Populate the modal selector once types are fetched
+                    populateAddNewWidgetModalSelector(); 
+                } catch (error) {
+                    displayMessage(`Error loading widget types: ${error.message}`, 'error');
+                    console.error('Fetch Widget Types Error:', error);
+                } finally {
+                    // hideLoading();
+                }
+            }
+
+            function populateAddNewWidgetModalSelector() {
+                newWidgetTypeSelect.innerHTML = ''; // Clear old options
+                if (availableWidgetTypes.length === 0) {
+                    const option = document.createElement('option');
+                    option.value = "";
+                    option.textContent = "No widget types available";
+                    option.disabled = true;
+                    newWidgetTypeSelect.appendChild(option);
+                    return;
+                }
+                availableWidgetTypes.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p.type;
+                    option.textContent = p.displayName;
+                    newWidgetTypeSelect.appendChild(option);
+                });
+            }
+
+            async function fetchScreenLayouts() {
+                try {
+                    showLoading('Loading screen configurations...');
+                    const response = await fetch('/api/get_screen_layouts');
+                    if (!response.ok) throw new Error('Failed to fetch screen layouts');
+                    screenLayouts = await response.json();
+                    populateScreenSelector();
+                } catch (error) {
+                    widgetListContainer.innerHTML = `<p style="color: red;">Error loading screen layouts: ${error.message}</p>`;
+                    console.error(error);
+                } finally {
+                    hideLoading();
+                }
+            }
+
+            screenSelector.addEventListener('change', (event) => {
+                renderScreenWidgets(event.target.value);
+            });
+
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                if (!selectedScreenId || !screenLayouts[selectedScreenId]) return;
+
+                showLoading('Saving configuration...');
+                console.log('Starting save operation...');
+                
+                try {
+                    // Handle screen-level settings (name and display time)
+                    const screenNameInput = document.getElementById(`currentScreenNameInput_${selectedScreenId}`);
+                    if (screenNameInput && screenNameInput.value.trim() !== '') {
+                        screenLayouts[selectedScreenId].name = screenNameInput.value.trim();
+                    } else if (screenNameInput) {
+                        displayMessage('Screen Name cannot be empty. Reverting to previous or ID.', 'error');
+                        screenNameInput.value = screenLayouts[selectedScreenId].name || selectedScreenId;
+                    }
+
+                    const screenDisplayTimeInput = document.getElementById(`screenDisplayTime_${selectedScreenId}`);
+                    let screenDisplayTime = 10; // Default if input not found or invalid
+                    if (screenDisplayTimeInput) {
+                        screenDisplayTime = parseInt(screenDisplayTimeInput.value, 10);
+                        if (isNaN(screenDisplayTime) || screenDisplayTime <= 0) {
+                            displayMessage('Invalid display time for screen. Using 10 seconds.', 'error');
+                            screenDisplayTime = 10;
+                            screenDisplayTimeInput.value = 10; // Correct the input field
+                        }
+                    }
+                    screenLayouts[selectedScreenId].display_time_seconds = screenDisplayTime;
+
+                    // Get all widgets except the screen settings div
+                    const allWidgetDivs = Array.from(document.querySelectorAll('.widget-config')).filter(
+                        div => div.id !== `screen-settings-${selectedScreenId}`
+                    );
+                    
+                    // Build new widgets array from scratch based on DOM elements
+                    const updatedWidgets = [];
+                    
+                    allWidgetDivs.forEach(widgetDiv => {
+                        try {
+                            // Get widget ID and type from data attributes or hidden inputs
+                            const widgetId = widgetDiv.dataset.widgetId || 
+                                          widgetDiv.querySelector('input[name*="_id_val"]')?.value;
+                            
+                            const widgetType = widgetDiv.dataset.widgetType || 
+                                            widgetDiv.querySelector('input[name*="_type_val"]')?.value;
+                            
+                            if (!widgetId || !widgetType) {
+                                console.error('Widget is missing ID or type', widgetDiv);
+                                return; // Skip this widget
+                            }
+                            
+                            // Get coordinates and enabled status
+                            const xInput = widgetDiv.querySelector('.widget-x-input');
+                            const yInput = widgetDiv.querySelector('.widget-y-input');
+                            const enabledInput = widgetDiv.querySelector('.widget-enabled-input');
+                            const colorInput = widgetDiv.querySelector('.widget-color-input');
+                            
+                            // Get actual values with fallbacks
+                            const x = xInput ? parseInt(xInput.value, 10) : 0;
+                            const y = yInput ? parseInt(yInput.value, 10) : 0;
+                            const enabled = enabledInput ? enabledInput.checked : true;
+                            const color = colorInput ? colorInput.value : '#FFFFFF';
+                            
+                            // Create widget object
+                            const widget = {
+                                id: widgetId,
+                                type: widgetType,
+                                x: isNaN(x) ? 0 : x,
+                                y: isNaN(y) ? 0 : y,
+                                enabled: enabled,
+                                color: color
+                            };
+                            
+                            // Get widget-specific config options from the DOM
+                            const widgetDefinition = availableWidgetTypes.find(p => p.type === widgetType);
+                            if (widgetDefinition && widgetDefinition.configOptions) {
+                                widgetDefinition.configOptions.forEach(option => {
+                                    const inputElement = widgetDiv.querySelector(`.widget-config-input[data-config-key="${option.name}"]`);
+                                    if (inputElement) {
+                                        if (option.type === 'checkbox') {
+                                            widget[option.name] = inputElement.checked;
+                                        } else if (option.type === 'number') {
+                                            const numVal = parseFloat(inputElement.value);
+                                            widget[option.name] = isNaN(numVal) ? (option.default !== undefined ? option.default : 0) : numVal;
+                                        } else if (option.type === 'select') {
+                                            widget[option.name] = inputElement.value;
+                                        } else { // text, string, or other input types that return a string value
+                                            widget[option.name] = inputElement.value;
+                                        }
+                                    } else {
+                                        // If an input isn't found, consider setting a default or logging a warning
+                                        if (option.default !== undefined) {
+                                            widget[option.name] = option.default;
+                                        }
+                                        console.warn(`Config input for ${option.name} of widget ${widgetId} not found. Using default if available.`);
+                                    }
+                                });
+                            }
+                            
+                            // Add to updated widgets array
+                            updatedWidgets.push(widget);
+                            
+                        } catch (error) {
+                            console.error('Error processing widget:', error);
+                        }
+                    });
+                    
+                    if (updatedWidgets.length === 0 && allWidgetDivs.length > 0) {
+                        console.warn('No widgets were successfully processed despite having widget divs');
+                    }
+                    
+                    // Update the screen layout
+                    screenLayouts[selectedScreenId].widgets = updatedWidgets;
+                    
+                    console.log('Prepared data for save, widget count:', updatedWidgets.length);
+                    console.log('Widget data sample:', updatedWidgets.slice(0, 2));
+                    
+                    // Send to server
+                    const response = await fetch('/api/save_screen_layouts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(screenLayouts),
+                    });
+                    
+                    console.log('Server response received:', response.status);
+                    const result = await response.json();
+                    console.log('Response data:', result);
+                    
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.message || 'Failed to save layouts');
+                    }
+                    
+                    displayMessage('Screen layouts saved successfully!', 'success');
+                    console.log('Save operation complete');
+                } catch (error) {
+                    console.error('Save error:', error);
+                    displayMessage(`Error saving layouts: ${error.message}`, 'error');
+                } finally {
+                    console.log('Finishing save operation, hiding loading overlay');
+                    hideLoading();
+                }
+            });
+
+            addNewWidgetButton.addEventListener('click', () => {
+                if (!selectedScreenId) {
+                    displayMessage('Please select a screen first to add a widget to it.', 'error');
+                    return;
+                }
+                // newWidgetTypeSelect.innerHTML = ''; // Clear old options -> Handled by populateAddNewWidgetModalSelector
+                // widgetPrototypes.forEach(p => { ... }); // OLD WAY
+                
+                // Ensure modal selector is populated (it should be if fetchWidgetTypes ran on load)
+                if (newWidgetTypeSelect.options.length === 0 && availableWidgetTypes.length > 0) {
+                    populateAddNewWidgetModalSelector();
+                }
+
+                if (availableWidgetTypes.length > 0) {
+                     // Suggest an ID based on the first available widget type
+                    const firstWidgetType = availableWidgetTypes[0].type;
+                    const suggestedId = `${selectedScreenId}_${firstWidgetType}_${Date.now() % 10000}`.toLowerCase().replace(/\s+/g, '_');
+                    newWidgetIdInput.value = suggestedId;
+                } else {
+                    newWidgetIdInput.value = `${selectedScreenId}_widget_${Date.now() % 10000}`.toLowerCase().replace(/\s+/g, '_');
+                }
+                addWidgetModal.style.display = 'block';
+            });
+
+            cancelAddWidgetBtn.addEventListener('click', () => {
+                addWidgetModal.style.display = 'none';
+            });
+
+            confirmAddWidgetBtn.addEventListener('click', () => {
+                const selectedTypeValue = newWidgetTypeSelect.value;
+                let newId = newWidgetIdInput.value.trim().replace(/\s+/g, '_');
+
+                if (!newId) {
+                    displayMessage('Widget ID cannot be empty.', 'error');
+                    return;
+                }
+                if (!selectedTypeValue) {
+                    displayMessage('Please select a widget type.', 'error');
+                    return;
+                }
+                if (!selectedScreenId || !screenLayouts[selectedScreenId]) {
+                    displayMessage('Error: No screen selected or screen data missing.', 'error');
+                    addWidgetModal.style.display = 'none';
+                    return;
+                }
+                if (screenLayouts[selectedScreenId].widgets.some(w => w.id === newId)) {
+                    displayMessage(`Widget ID '${newId}' already exists on screen '${selectedScreenId}'. Please use a unique ID.`, 'error');
+                    return;
+                }
+
+                const widgetDefinition = availableWidgetTypes.find(p => p.type === selectedTypeValue);
+                if (!widgetDefinition) {
+                    displayMessage(`Selected widget type '${selectedTypeValue}' definition not found.`, 'error');
+                    return;
+                }
+
+                const newWidgetInstance = {
+                    id: newId,
+                    type: selectedTypeValue,
+                    x: 0, 
+                    y: 0, 
+                    enabled: true,
+                    color: '#FFFFFF'
+                };
+
+                // Add default values for widget-specific config options
+                if (widgetDefinition.configOptions && widgetDefinition.configOptions.length > 0) {
+                    widgetDefinition.configOptions.forEach(opt => {
+                        if (opt.default !== undefined) {
+                            newWidgetInstance[opt.name] = opt.default;
+                        }
+                    });
+                }
+
+                screenLayouts[selectedScreenId].widgets.push(newWidgetInstance);
+                renderScreenWidgets(selectedScreenId); // Re-render the selected screen
+                addWidgetModal.style.display = 'none';
+                displayMessage('New widget added. Configure and save all layouts to persist.', 'success');
+            });
+
+            function removeWidgetInstance(screenId, widgetId) {
+                if (screenLayouts[screenId] && screenLayouts[screenId].widgets) {
+                    const initialLength = screenLayouts[screenId].widgets.length;
+                    screenLayouts[screenId].widgets = screenLayouts[screenId].widgets.filter(w => w.id !== widgetId);
+                    if (screenLayouts[screenId].widgets.length < initialLength) {
+                         renderScreenWidgets(screenId); // Re-render the widgets for the current screen
+                         displayMessage(`Widget '${widgetId}' removed. Save layouts to persist.`, 'success');
+                    } else {
+                        displayMessage(`Widget '${widgetId}' not found for removal.`, 'error');
+                    }
+                }
+            }
+
+            // --- Screen Management Event Listeners ---
+            addNewScreenButton.addEventListener('click', () => {
+                newScreenIdInput.value = 'screen_' + Date.now() % 10000; // Suggest ID
+                newScreenNameInput.value = '';
+                addScreenModal.style.display = 'block';
+                newScreenIdInput.focus();
+            });
+
+            cancelAddScreenBtn.addEventListener('click', () => {
+                addScreenModal.style.display = 'none';
+            });
+
+            confirmAddScreenBtn.addEventListener('click', async () => {
+                const screenId = newScreenIdInput.value.trim();
+                const screenName = newScreenNameInput.value.trim();
+
+                if (!screenId || !screenName) {
+                    displayMessage('Screen ID and Screen Name cannot be empty.', 'error');
+                    return;
+                }
+                // Basic validation for screen_id (e.g., no spaces, simple characters)
+                if (!/^[a-zA-Z0-9_\-]+$/.test(screenId)) {
+                    displayMessage('Screen ID can only contain letters, numbers, underscores, and hyphens.', 'error');
+                    return;
+                }
+
+                try {
+                    showLoading('Adding new screen...');
+                    const response = await fetch('/api/add_screen', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ screen_id: screenId, screen_name: screenName })
+                    });
+                    const result = await response.json();
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.message || 'Failed to add screen on server.');
+                    }
+                    displayMessage(`Screen '${screenName}' added successfully!`, 'success');
+                    addScreenModal.style.display = 'none';
+                    selectedScreenId = result.new_screen_id; // Try to select the new screen
+                    await fetchScreenLayouts(); // This will repopulate and re-render
+                } catch (error) {
+                    displayMessage(`Error adding screen: ${error.message}`, 'error');
+                } finally {
+                    hideLoading();
+                }
+            });
+
+            removeSelectedScreenButton.addEventListener('click', async () => {
+                const screenIdToRemove = screenSelector.value;
+                if (!screenIdToRemove || Object.keys(screenLayouts).length === 0) {
+                    displayMessage('No screen selected or no screens to remove.', 'error');
+                    return;
+                }
+
+                if (screenIdToRemove === 'default') {
+                    displayMessage('Cannot remove the default screen.', 'error');
+                    return;
+                }
+
+                if (!confirm(`Are you sure you want to remove screen "${screenLayouts[screenIdToRemove]?.name || screenIdToRemove}"? This cannot be undone.`)) {
+                    return;
+                }
+
+                try {
+                    showLoading('Removing screen...');
+                    const response = await fetch(`/api/remove_screen/${screenIdToRemove}`, {
+                        method: 'POST' // Changed from DELETE to POST as per backend
+                    });
+                    const result = await response.json();
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.message || 'Failed to remove screen on server.');
+                    }
+                    displayMessage(`Screen '${result.removed_screen_name || screenIdToRemove}' removed.`, 'success');
+                    selectedScreenId = result.new_active_mode || null; // Server might tell us new active mode
+                    await fetchScreenLayouts(); // Repopulate and re-render. populateScreenSelector will pick a new default if needed.
+                } catch (error) {
+                    displayMessage(`Error removing screen: ${error.message}`, 'error');
+                } finally {
+                    hideLoading();
+                }
+            });
+
+            // Initial fetches
+            fetchWidgetTypes(); // Fetch widget types on load
+            fetchScreenLayouts(); 
+        });
+    </script>
+</body>
+</html> 
