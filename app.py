@@ -122,56 +122,82 @@ screen_layouts = {} # Will be loaded or set to default
 DEFAULT_SCREEN_DISPLAY_TIME_S = 10
 
 def load_screen_layouts():
-    global screen_layouts
+    global screen_layouts, MATRIX_DATA_LOGGING_ENABLED
+    
+    raw_loaded_data = {}
+
     if os.path.exists(SCREEN_LAYOUTS_FILE_PATH):
         try:
             with open(SCREEN_LAYOUTS_FILE_PATH, 'r') as f:
-                loaded_layouts = json.load(f)
-            print(f"Loaded screen layouts from {SCREEN_LAYOUTS_FILE_PATH}")
+                raw_loaded_data = json.load(f)
+            print(f"Loaded raw data from {SCREEN_LAYOUTS_FILE_PATH}")
+
+            MATRIX_DATA_LOGGING_ENABLED = raw_loaded_data.get('matrix_data_logging_enabled', True)
+            print(f"Matrix data logging state loaded/defaulted to: {MATRIX_DATA_LOGGING_ENABLED}")
+
+            current_file_screen_layouts = {
+                k: v for k, v in raw_loaded_data.items() if k != 'matrix_data_logging_enabled'
+            }
             
-            if not isinstance(loaded_layouts, dict) or 'default' not in loaded_layouts:
-                print("Warning: Invalid screen_layouts.json structure or default screen missing. Reverting to defaults.")
+            if not isinstance(current_file_screen_layouts, dict) or \
+               ('default' not in current_file_screen_layouts and bool(current_file_screen_layouts)):
+                print("Warning: Invalid screen_layouts structure or default screen missing. Reverting to defaults for screens.")
                 screen_layouts = default_screen_layouts.copy()
                 _save_layouts_to_file()
                 return
 
             migrated_layouts = {}
-            for screen_id, screen_config in loaded_layouts.items():
-                if not isinstance(screen_config, dict):
-                    print(f"Warning: Invalid configuration for screen '{screen_id}'. Skipping.")
+            for screen_id, screen_config_item in current_file_screen_layouts.items(): # Renamed screen_config to screen_config_item
+                if not isinstance(screen_config_item, dict): # Check item from loop
+                    print(f"Warning: Invalid configuration for screen '{screen_id}'. Skipping item.")
                     continue
-                if 'widgets' not in screen_config: 
-                    screen_config['widgets'] = []
-                if 'display_time_seconds' not in screen_config:
-                    screen_config['display_time_seconds'] = DEFAULT_SCREEN_DISPLAY_TIME_S
-                elif not isinstance(screen_config['display_time_seconds'], (int, float)) or screen_config['display_time_seconds'] <= 0:
-                    screen_config['display_time_seconds'] = DEFAULT_SCREEN_DISPLAY_TIME_S
-                migrated_layouts[screen_id] = screen_config
+                
+                # Make a mutable copy for modification
+                current_screen_config = screen_config_item.copy()
+
+                if 'widgets' not in current_screen_config: 
+                    current_screen_config['widgets'] = []
+                if 'display_time_seconds' not in current_screen_config:
+                    current_screen_config['display_time_seconds'] = DEFAULT_SCREEN_DISPLAY_TIME_S
+                elif not isinstance(current_screen_config['display_time_seconds'], (int, float)) or current_screen_config['display_time_seconds'] <= 0:
+                    current_screen_config['display_time_seconds'] = DEFAULT_SCREEN_DISPLAY_TIME_S
+                migrated_layouts[screen_id] = current_screen_config # Add modified copy
             
             screen_layouts = migrated_layouts
-            if 'default' not in screen_layouts:
-                 print("Critical: Default screen was lost during migration. Re-initializing default screen.")
+            if not screen_layouts: 
+                 print("No screen configurations found after loading. Initializing with default screen(s).")
+                 screen_layouts = default_screen_layouts.copy()
+                 _save_layouts_to_file()
+            elif 'default' not in screen_layouts: 
+                 print("Critical: Default screen was lost or not found. Re-initializing default screen.")
                  screen_layouts['default'] = default_screen_layouts['default'].copy()
                  _save_layouts_to_file()
 
         except json.JSONDecodeError:
-            print(f"Error decoding {SCREEN_LAYOUTS_FILE_PATH}. Using default layouts.")
+            print(f"Error decoding {SCREEN_LAYOUTS_FILE_PATH}. Using default layouts. Matrix logging defaults to True.")
+            MATRIX_DATA_LOGGING_ENABLED = True
             screen_layouts = default_screen_layouts.copy()
             _save_layouts_to_file()
         except Exception as e:
-            print(f"Error loading {SCREEN_LAYOUTS_FILE_PATH}: {e}. Using default layouts.")
+            print(f"Error loading {SCREEN_LAYOUTS_FILE_PATH}: {e}. Using default layouts. Matrix logging defaults to True.")
+            MATRIX_DATA_LOGGING_ENABLED = True
             screen_layouts = default_screen_layouts.copy()
             _save_layouts_to_file()
     else:
-        print(f"{SCREEN_LAYOUTS_FILE_PATH} not found. Using default layouts and creating file.")
+        print(f"{SCREEN_LAYOUTS_FILE_PATH} not found. Using default layouts and creating file. Matrix logging defaults to True.")
+        MATRIX_DATA_LOGGING_ENABLED = True
         screen_layouts = default_screen_layouts.copy()
         _save_layouts_to_file()
 
 def _save_layouts_to_file():
+    global screen_layouts, MATRIX_DATA_LOGGING_ENABLED
     try:
+        data_to_save = {'matrix_data_logging_enabled': MATRIX_DATA_LOGGING_ENABLED}
+        data_to_save.update(screen_layouts)
+
         with open(SCREEN_LAYOUTS_FILE_PATH, 'w') as f:
-            json.dump(screen_layouts, f, indent=4)
-        print(f"Screen layouts saved to {SCREEN_LAYOUTS_FILE_PATH}")
+            json.dump(data_to_save, f, indent=4)
+        print(f"Screen layouts and global settings (matrix logging: {MATRIX_DATA_LOGGING_ENABLED}) saved to {SCREEN_LAYOUTS_FILE_PATH}")
         return True
     except Exception as e:
         print(f"Error saving screen layouts to {SCREEN_LAYOUTS_FILE_PATH}: {e}")
@@ -469,7 +495,13 @@ def set_matrix_logging_status():
         return jsonify(success=False, message="Invalid request. 'enabled' (boolean) is required."), 400
     
     MATRIX_DATA_LOGGING_ENABLED = data['enabled']
-    print(f"Matrix data route logging set to: {MATRIX_DATA_LOGGING_ENABLED}") # General app log
+    print(f"Matrix data route logging set to: {MATRIX_DATA_LOGGING_ENABLED}")
+    
+    if _save_layouts_to_file():
+        print(f"Matrix logging status ({MATRIX_DATA_LOGGING_ENABLED}) saved to config file.")
+    else:
+        print(f"Error: Failed to save matrix logging status ({MATRIX_DATA_LOGGING_ENABLED}) to config file.")
+            
     return jsonify(success=True, enabled=MATRIX_DATA_LOGGING_ENABLED)
 
 def periodic_display_updater():
