@@ -31,6 +31,22 @@ class BaseWidget(ABC):
         self.config = config # Store the full config for widget-specific use
         self.global_context = global_context if global_context is not None else {}
 
+    def reconfigure(self):
+        """
+        Re-apply configuration to an existing widget instance.
+        This is useful when the widget's config is updated after instantiation.
+        """
+        # Re-read common properties from self.config
+        self.widget_id = self.config.get('id', self.widget_id if hasattr(self, 'widget_id') else 'unknown_widget')
+        self.widget_type = self.config.get('type', self.widget_type if hasattr(self, 'widget_type') else 'unknown_type')
+        self.x = self.config.get('x', self.x if hasattr(self, 'x') else 0)
+        self.y = self.config.get('y', self.y if hasattr(self, 'y') else 0)
+        self.enabled = self.config.get('enabled', self.enabled if hasattr(self, 'enabled') else True)
+        self.color = self.config.get('color', self.color if hasattr(self, 'color') else '#FFFFFF')
+        self.enable_logging = self.config.get('enable_logging', self.DEFAULT_ENABLE_LOGGING)
+        # Note: self.config itself is assumed to be updated by the caller before calling reconfigure.
+        # self.global_context is also updated by the caller.
+
     def _log(self, level: str, message: str):
         """Helper method for logging. Prints if self.enable_logging is True."""
         if self.enable_logging:

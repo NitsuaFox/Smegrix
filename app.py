@@ -421,6 +421,7 @@ def update_display_content():
                             # Update config and context on existing instance
                             instance.config = widget_config 
                             instance.global_context = global_widget_context
+                            instance.reconfigure() # Re-apply config to internal state
                             # print(f"Reusing instance for {widget_id}") # Debug
                         else:
                             # Type mismatch, should re-create

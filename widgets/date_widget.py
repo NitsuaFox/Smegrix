@@ -19,6 +19,12 @@ class DateWidget(BaseWidget):
         self.date_format_type = self.config.get('date_format_type', "dd_mm") 
         self.font_size = self.config.get('font_size', "medium")
 
+    def reconfigure(self):
+        super().reconfigure() # Call base class reconfigure
+        # Re-apply DateWidget specific configurations
+        self.date_format_type = self.config.get('date_format_type', "dd_mm")
+        self.font_size = self.config.get('font_size', "medium")
+
     def get_content(self) -> str:
         """Returns the current date formatted based on the selected type."""
         now = self.global_context.get('now')

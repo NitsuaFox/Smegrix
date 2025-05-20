@@ -54,6 +54,20 @@ class WeatherWidget(BaseWidget):
         # Ensure super().__init__ is called if not already, for enable_logging
         # It's called at the top of __init__ in this class, so self.enable_logging and self._log are available
 
+    def reconfigure(self):
+        super().reconfigure() # Call base class reconfigure
+        # Re-apply WeatherWidget specific configurations
+        self.location_name = self.config.get('location_name', 'Billingham,UK')
+        self.units = self.config.get('units', 'metric')
+        self.latitude = self.config.get('latitude', self.DEFAULT_LATITUDE)
+        self.longitude = self.config.get('longitude', self.DEFAULT_LONGITUDE)
+        self.time_display_format = self.config.get('time_display_format', '%H:%M')
+        self.display_format = self.config.get('display_format', 'Temp: {temp}{unit_symbol}')
+        self.font_size = self.config.get('font_size', "medium")
+        self.update_interval_minutes = self.config.get('update_interval_minutes', self.DEFAULT_UPDATE_INTERVAL_MINUTES)
+        # Note: Cache attributes (self.last_weather_data, self.last_fetch_time) are not reset here
+        # as the underlying data might still be valid. get_content() handles cache logic.
+
     def _parse_weather_data(self, weather_data_json: dict) -> dict:
         """Helper to parse the JSON response from Open-Meteo into a flat dictionary."""
         available_data = {
