@@ -83,6 +83,21 @@ def load_widget_classes():
     print(f"Available widgets: {list(AVAILABLE_WIDGETS.keys())}")
 
 # --- Screen Layouts and Widget Instance Configuration System ---
+
+def _get_all_widget_type_data():
+    """Helper function to build the list of available widget types and their configurations."""
+    widget_type_data = []
+    for type_key, widget_class in AVAILABLE_WIDGETS.items():
+        display_name = widget_class.__name__.replace("Widget", "")
+        display_name = re.sub(r'(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])', ' ', display_name).strip()
+        
+        widget_type_data.append({
+            "type": type_key,
+            "displayName": display_name,
+            "configOptions": widget_class.get_config_options()
+        })
+    return widget_type_data
+
 # Helper function to convert hex color string to RGB tuple
 def hex_to_rgb(hex_color_string):
     """Converts a hex color string (e.g., '#FF0000') to an (R, G, B) tuple."""
@@ -203,6 +218,98 @@ def _save_layouts_to_file():
         print(f"Error saving screen layouts to {SCREEN_LAYOUTS_FILE_PATH}: {e}")
         return False
 
+def _update_and_save_screen_layouts(new_layouts_data):
+    """Updates the global screen_layouts, clears active instances, and saves to file."""
+    global screen_layouts, active_widget_instances
+    # No lock needed here if this function is always called within a lock from the route
+    # or if the calling context is responsible for locking.
+    # For now, assuming the route will handle the lock for atomicity of request processing.
+    screen_layouts = new_layouts_data
+    active_widget_instances.clear()
+    print("Cleared active_widget_instances due to layout save.")
+    return _save_layouts_to_file()
+
+def _add_new_screen(screen_id, screen_name):
+    """Adds a new screen to the global screen_layouts and saves to file."""
+    global screen_layouts, active_widget_instances
+    # Assuming lock is handled by the caller (the route function)
+    if screen_id in screen_layouts:
+        # This check is also in the route, but good for the helper to be safe if called elsewhere.
+        # The route can return a specific error before calling this if ID exists.
+        # For now, this makes the helper robust but might lead to a generic error if route doesn't pre-check.
+        # Or, we can let the route do the pre-check and this helper assumes ID is new.
+        # Let's assume the route does the pre-check for cleaner error messages from route.
+        pass # Route should prevent this, but if called directly, this would be an issue. 
+             # Decision: Route will do the pre-check. This func assumes ID is new for its context.
+
+    screen_layouts[screen_id] = {
+        "name": screen_name,
+        "widgets": [],
+        "display_time_seconds": DEFAULT_SCREEN_DISPLAY_TIME_S
+    }
+    active_widget_instances.clear()
+    print(f"Cleared active_widget_instances due to adding screen: {screen_id}")
+    return _save_layouts_to_file()
+
+def _remove_screen(screen_id_to_remove):
+    """Removes a screen from global layouts, updates current_display_mode if needed, and saves."""
+    global screen_layouts, current_display_mode, active_widget_instances
+    # Assume screen_id_to_remove exists and is not 'default' (checked by caller/route)
+    
+    removed_screen_name = screen_layouts[screen_id_to_remove].get('name', screen_id_to_remove)
+    del screen_layouts[screen_id_to_remove]
+    
+    display_mode_was_changed = False
+    if current_display_mode == screen_id_to_remove:
+        current_display_mode = 'default' 
+        display_mode_was_changed = True
+        print(f"Current display mode was {screen_id_to_remove}, switched to default following removal.")
+        
+    active_widget_instances.clear()
+    print(f"Cleared active_widget_instances due to removing screen: {screen_id_to_remove}")
+    
+    saved_to_file = _save_layouts_to_file()
+    return saved_to_file, removed_screen_name, display_mode_was_changed
+
+def _set_active_display_mode(mode_name):
+    """Sets the current_display_mode if the mode_name is valid."""
+    global current_display_mode
+    if mode_name in screen_layouts: # Check for existence within screen_layouts
+        current_display_mode = mode_name
+        return True # Successfully set
+    return False # Mode not found
+
+def _set_matrix_logging_enabled_and_save(status: bool):
+    """Updates the global MATRIX_DATA_LOGGING_ENABLED flag and triggers saving all layouts."""
+    global MATRIX_DATA_LOGGING_ENABLED
+    MATRIX_DATA_LOGGING_ENABLED = status
+    print(f"Matrix data route logging globally set to: {MATRIX_DATA_LOGGING_ENABLED}")
+    if _save_layouts_to_file():
+        return True
+    else:
+        return False
+
+def _prepare_global_widget_context(current_time, current_screen_widget_configs):
+    """Prepares the global context dictionary for widgets, fetching network info if needed."""
+    ssid_val, rssi_val = ("N/A", "N/A") # Defaults
+    needs_net_info = any(
+        widget_config.get('type') in AVAILABLE_WIDGETS and \
+        (AVAILABLE_WIDGETS[widget_config.get('type')].__name__ in ['NetworkSSIDWidget', 'NetworkRSSIDWidget']) and \
+        widget_config.get('enabled', False)
+        for widget_config in current_screen_widget_configs
+    )
+    if needs_net_info:
+        # Consider if get_network_info_macos() should be more generic or platform-dependent here
+        ssid_val, rssi_val = get_network_info_macos() 
+
+    return {
+        'now': current_time,
+        'ssid': ssid_val,
+        'rssi': rssi_val,
+        'get_text_dimensions': matrix_display.get_text_dimensions, # Pass the method itself
+        'matrix_width': MATRIX_WIDTH
+    }
+
 def get_network_info_macos():
     ssid = "N/A"
     rssi = "N/A"
@@ -234,20 +341,8 @@ def config_page():
 @app.route('/api/get_widget_types', methods=['GET'])
 def get_widget_types_route():
     """Returns a list of available widget types and their configurations."""
-    widget_type_data = []
-    for type_key, widget_class in AVAILABLE_WIDGETS.items():
-        # Attempt to get a display name (e.g., from class docstring or a class variable)
-        # For simplicity, we'll use the type_key capitalized for now, but this can be improved.
-        display_name = widget_class.__name__.replace("Widget", "") # Simple name like "Time" or "NetworkSSID"
-        # Make it more readable, e.g. NetworkSSID -> Network SSID
-        display_name = re.sub(r'(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])', ' ', display_name).strip()
-        
-        widget_type_data.append({
-            "type": type_key,
-            "displayName": display_name,
-            "configOptions": widget_class.get_config_options() # Get specific config options
-        })
-    return jsonify(widget_type_data)
+    widget_data = _get_all_widget_type_data()
+    return jsonify(widget_data)
 
 @app.route('/api/get_screen_layouts', methods=['GET'])
 def get_screen_layouts_route():
@@ -255,19 +350,16 @@ def get_screen_layouts_route():
 
 @app.route('/api/save_screen_layouts', methods=['POST'])
 def save_screen_layouts_route():
-    global screen_layouts, active_widget_instances
+    # global screen_layouts, active_widget_instances # No longer directly manipulating globals here
     try:
         new_layouts = request.get_json()
         if not isinstance(new_layouts, dict):
             return jsonify(success=False, message="Invalid layout format: must be a dictionary."), 400
-        with data_lock: # Protect write to screen_layouts
-            screen_layouts = new_layouts
-            active_widget_instances.clear() # Clear instances to force re-creation
-            print("Cleared active_widget_instances due to layout save.")
-            saved = _save_layouts_to_file()
+        
+        with data_lock: # Lock remains here to protect the overall operation triggered by the request
+            saved = _update_and_save_screen_layouts(new_layouts)
         
         if saved:
-            # update_display_content() # The background thread will handle updates
             return jsonify(success=True, message="Screen layouts saved successfully.")
         else:
             return jsonify(success=False, message="Failed to save screen layouts to file."), 500
@@ -276,42 +368,43 @@ def save_screen_layouts_route():
 
 @app.route('/api/add_screen', methods=['POST'])
 def add_screen_route():
-    global screen_layouts, active_widget_instances
+    # global screen_layouts, active_widget_instances # No longer directly manipulating globals here
     try:
         data = request.get_json()
         new_screen_id = data.get('screen_id')
         new_screen_name = data.get('screen_name')
+
         if not new_screen_id or not new_screen_name:
             return jsonify(success=False, message="Screen ID and Name are required."), 400
         if not re.match(r"^[a-zA-Z0-9_\-]+$", new_screen_id):
             return jsonify(success=False, message="Screen ID can only contain letters, numbers, underscores, and hyphens."), 400
         
         with data_lock:
-            if new_screen_id in screen_layouts:
+            if new_screen_id in screen_layouts: # Pre-check for existing ID before calling helper
                 return jsonify(success=False, message=f"Screen ID '{new_screen_id}' already exists."), 400
-            screen_layouts[new_screen_id] = {
-                "name": new_screen_name,
-                "widgets": [],
-                "display_time_seconds": DEFAULT_SCREEN_DISPLAY_TIME_S
-            }
-            active_widget_instances.clear() # Clear instances as layout structure changed
-            print("Cleared active_widget_instances due to adding screen.")
-            saved = _save_layouts_to_file()
+            
+            saved = _add_new_screen(new_screen_id, new_screen_name)
 
         if saved:
             return jsonify(success=True, message=f"Screen '{new_screen_name}' added successfully.", new_screen_id=new_screen_id)
         else:
-            # Rollback if save failed, though _save_layouts_to_file failing is less common than the write itself
-            with data_lock: 
-                if new_screen_id in screen_layouts: del screen_layouts[new_screen_id]
-            return jsonify(success=False, message="Failed to save updated layouts to file."), 500
+            # Simplified rollback: if save failed, the in-memory change might persist until next load
+            # or we could attempt to remove it. For now, error is reported.
+            # A more robust rollback would explicitly remove new_screen_id from screen_layouts here if save failed.
+            with data_lock: # Ensure thread safety if we decide to revert the in-memory change
+                if new_screen_id in screen_layouts: # If it was added and save failed
+                    del screen_layouts[new_screen_id] # Revert in-memory addition
+                    print(f"Rolled back addition of screen '{new_screen_id}' due to save failure.")
+            return jsonify(success=False, message="Failed to save updated layouts to file after adding screen."), 500
     except Exception as e:
         return jsonify(success=False, message=f"Error adding screen: {e}"), 400
 
 @app.route('/api/remove_screen/<string:screen_id_to_remove>', methods=['POST'])
 def remove_screen_route(screen_id_to_remove):
-    global screen_layouts, current_display_mode, active_widget_instances
-    original_layouts_copy = None # For potential rollback if save fails
+    global current_display_mode # Declare usage of global for reading/writing after helper potentially changes it
+    original_screen_config = None
+    original_current_display_mode_snapshot = None # Unique name for the snapshot
+
     try:
         if screen_id_to_remove == 'default':
             return jsonify(success=False, message="Cannot remove the default screen."), 400
@@ -319,90 +412,76 @@ def remove_screen_route(screen_id_to_remove):
         with data_lock:
             if screen_id_to_remove not in screen_layouts:
                 return jsonify(success=False, message=f"Screen ID '{screen_id_to_remove}' not found."), 404
-            original_layouts_copy = json.dumps(screen_layouts) # Deep copy for rollback
-            removed_screen_name = screen_layouts[screen_id_to_remove].get('name', screen_id_to_remove)
-            del screen_layouts[screen_id_to_remove]
-            display_mode_changed = False
-            if current_display_mode == screen_id_to_remove:
-                current_display_mode = 'default' 
-                display_mode_changed = True
-                print(f"Current display mode was {screen_id_to_remove}, switched to default.")
-            active_widget_instances.clear() # Clear instances as layout structure changed
-            print("Cleared active_widget_instances due to removing screen.")
-            saved = _save_layouts_to_file()
+            
+            # Snapshot for potential rollback of in-memory changes if save fails
+            original_screen_config = screen_layouts.get(screen_id_to_remove).copy()
+            original_current_display_mode_snapshot = current_display_mode # Snapshot global before change by helper
+
+            saved, removed_name, mode_changed = _remove_screen(screen_id_to_remove)
 
         if saved:
-            # update_display_content() will be handled by the background thread
-            return jsonify(success=True, message=f"Screen '{removed_screen_name}' removed successfully.", new_active_mode=current_display_mode if display_mode_changed else None)
+            new_active_mode_val = None
+            if mode_changed:
+                # current_display_mode (global) has been updated by _remove_screen to 'default'
+                new_active_mode_val = current_display_mode 
+            
+            return jsonify(success=True, 
+                           message=f"Screen '{removed_name}' removed successfully.", 
+                           new_active_mode=new_active_mode_val)
         else:
-            # Rollback
-            if original_layouts_copy:
-                with data_lock:
-                    screen_layouts = json.loads(original_layouts_copy)
-                    # We might also need to revert current_display_mode if it was changed and save failed
-                    # but _save_layouts_to_file is less likely to fail here.
+            # Attempt to roll back in-memory changes if save failed
+            with data_lock:
+                if original_screen_config:
+                    screen_layouts[screen_id_to_remove] = original_screen_config # Restore deleted screen
+                
+                # If mode was changed by the helper (meaning global current_display_mode was set to 'default'),
+                # revert it to its state before the helper call using the snapshot.
+                if mode_changed: 
+                    current_display_mode = original_current_display_mode_snapshot
+                
+                active_widget_instances.clear() # Keep it simple: clear instances on failed save too.
+                print(f"Rolled back in-memory changes for screen '{screen_id_to_remove}' due to save failure.")
             return jsonify(success=False, message="Failed to save updated layouts to file after removing screen."), 500
     except Exception as e:
         return jsonify(success=False, message=f"Error removing screen: {e}"), 400
 
 @app.route('/api/set_display_mode/<string:mode_name>', methods=['POST'])
 def set_display_mode_route(mode_name):
-    global current_display_mode
-    with data_lock: # Protect read of screen_layouts and write to current_display_mode
-        if mode_name in screen_layouts:
-            current_display_mode = mode_name
-            # update_display_content() # Let background thread handle this
-            # Note: Changing mode doesn't necessarily need to clear all widget instances
-            # if they could persist across screens, but current model is per-screen instances implicitly.
-            # No, active_widget_instances are managed by update_display_content based on current screen.
-            return jsonify(success=True, message=f"Display mode set to {mode_name}"), 200
+    # global current_display_mode # Managed by helper
+    with data_lock: # Protect read of screen_layouts and write to current_display_mode by helper
+        success = _set_active_display_mode(mode_name)
+    
+    if success:
+        return jsonify(success=True, message=f"Display mode set to {mode_name}"), 200
+    else:
         return jsonify(success=False, message=f"Invalid display mode: {mode_name}"), 400
 
 def update_display_content(): 
-    global active_widget_instances, current_frame_widget_dimensions # Ensure we're using the global cache & dimensions list
-    with data_lock: # Ensure exclusive access to shared resources
+    global active_widget_instances, current_frame_widget_dimensions
+    with data_lock:
         matrix_display.clear() 
         now = datetime.datetime.now()
         
-        # Clear dimensions from previous frame
         new_dimensions_this_frame = []
 
         current_screen_config = screen_layouts.get(current_display_mode)
         if not current_screen_config:
-            print(f"Warning: Screen '{current_display_mode}' not found in screen_layouts. Cannot update display.")
-            # Clean up instances if the screen config is gone
-            # active_widget_instances.clear() # Or selectively remove only for this screen if it existed
+            print(f"Warning: Screen '{current_display_mode}' not found. Cannot update display.")
             return
 
         widgets_on_current_screen_config = current_screen_config.get('widgets', [])
         current_widget_ids_on_screen = {wc['id'] for wc in widgets_on_current_screen_config if wc.get('enabled')}
 
-        # Remove instances that are no longer on the current enabled screen
         ids_to_remove = set(active_widget_instances.keys()) - current_widget_ids_on_screen
         for widget_id in ids_to_remove:
             print(f"Removing instance for widget ID: {widget_id} (no longer on screen or disabled)")
             del active_widget_instances[widget_id]
 
-        # Prepare global context (conditionally fetch network info)
-        needs_net_info = any(
-            widget_config.get('type') in AVAILABLE_WIDGETS and \
-            (AVAILABLE_WIDGETS[widget_config.get('type')].__name__ in ['NetworkSSIDWidget', 'NetworkRSSIDWidget']) and \
-            widget_config.get('enabled', False)
-            for widget_config in widgets_on_current_screen_config
-        )
-        ssid_val, rssi_val = ("N/A", "N/A")
-        if needs_net_info:
-            ssid_val, rssi_val = get_network_info_macos()
-
-        global_widget_context = {
-            'now': now,
-            'ssid': ssid_val,
-            'rssi': rssi_val,
-            'get_text_dimensions': matrix_display.get_text_dimensions,
-            'matrix_width': MATRIX_WIDTH
-        }
+        # Prepare global context using the new helper
+        global_widget_context = _prepare_global_widget_context(now, widgets_on_current_screen_config)
 
         if not widgets_on_current_screen_config:
+            current_frame_widget_dimensions = new_dimensions_this_frame # Ensure it's updated even if no widgets
             return
 
         for widget_config in widgets_on_current_screen_config:
@@ -498,20 +577,28 @@ def get_matrix_logging_status():
 
 @app.route('/api/set_matrix_logging_status', methods=['POST'])
 def set_matrix_logging_status():
-    global MATRIX_DATA_LOGGING_ENABLED
+    # global MATRIX_DATA_LOGGING_ENABLED # This global is managed by the helper function
     data = request.get_json()
     if data is None or 'enabled' not in data or not isinstance(data['enabled'], bool):
         return jsonify(success=False, message="Invalid request. 'enabled' (boolean) is required."), 400
     
-    MATRIX_DATA_LOGGING_ENABLED = data['enabled']
-    print(f"Matrix data route logging set to: {MATRIX_DATA_LOGGING_ENABLED}")
+    requested_status = data['enabled']
     
-    if _save_layouts_to_file():
-        print(f"Matrix logging status ({MATRIX_DATA_LOGGING_ENABLED}) saved to config file.")
-    else:
-        print(f"Error: Failed to save matrix logging status ({MATRIX_DATA_LOGGING_ENABLED}) to config file.")
+    # The data_lock is important here because _set_matrix_logging_enabled_and_save calls 
+    # _save_layouts_to_file, which reads screen_layouts (shared) and writes to the filesystem.
+    with data_lock: 
+        save_success = _set_matrix_logging_enabled_and_save(requested_status)
             
-    return jsonify(success=True, enabled=MATRIX_DATA_LOGGING_ENABLED)
+    if save_success:
+        # Return the current status of MATRIX_DATA_LOGGING_ENABLED, which the helper updated.
+        return jsonify(success=True, enabled=MATRIX_DATA_LOGGING_ENABLED)
+    else:
+        # If saving failed, the global MATRIX_DATA_LOGGING_ENABLED might have changed,
+        # but its persistence failed. The user gets an error. 
+        # The actual global MATRIX_DATA_LOGGING_ENABLED reflects the attempted state.
+        return jsonify(success=False, 
+                       message="Failed to save configuration after updating logging status.", 
+                       enabled=MATRIX_DATA_LOGGING_ENABLED), 500
 
 def periodic_display_updater():
     """Periodically calls update_display_content in a background thread."""

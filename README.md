@@ -40,7 +40,7 @@ Smegtrix is a Python-based simulator and controller for a 64x64 LED matrix displ
 *   **Backend**: Python, Flask
 *   **Frontend**: HTML, CSS, JavaScript (vanilla)
 *   **Data Storage**: JSON file (`screen_layouts.json`) for all screen and widget configurations.
-*   **Key Python Libraries**: `Flask`, `requests`, `ntplib`.
+*   **Key Python Libraries**: `Flask`, `requests`, `ntplib`, `feedparser`.
 
 ## Project Structure
 
@@ -57,6 +57,7 @@ Smegtrix is a Python-based simulator and controller for a 64x64 LED matrix displ
 │   ├── weather_widget.py   # Displays weather forecast with advanced formatting (Open-Meteo)
 │   ├── network_stats_widget.py # Displays network SSID or IP (macOS, Linux)
 │   ├── network_rssi_widget.py # Displays network RSSI (macOS specific via global context)
+│   ├── news_widget.py      # Displays scrolling RSS news headlines
 │   └── __init__.py         # Makes 'widgets' a Python package
 ├── static/                 # Static assets
 │   └── css/  
@@ -87,6 +88,7 @@ Smegtrix is a Python-based simulator and controller for a 64x64 LED matrix displ
     ```bash
     pip install -r requirements.txt
     ```
+    (Ensure `feedparser` is added to `requirements.txt` if you intend to use the NewsWidget: `pip install feedparser` and then `pip freeze > requirements.txt`)
 5.  **Run the Flask application**:
     ```bash
     python app.py
@@ -106,7 +108,8 @@ The widget system is designed to be modular and extensible.
 *   **Widget Directory**: Widgets are defined as Python classes in separate files within the `widgets/` directory (e.g., `time_widget.py`, `weather_widget.py`).
 *   **Base Class**: All widgets must inherit from `widgets.base_widget.BaseWidget`. This base class defines a common interface:
     *   `__init__(self, config, global_context)`: Initializes the widget with its specific configuration (ID, type, x, y, color, enabled, custom options) and a global context (e.g., current time via `global_context['now']`, network info like `global_context['ssid']`, `global_context['rssi']`).
-    *   `get_content(self) -> str`: Returns the string content the widget should display.
+    *   `get_content(self) -> str`: Returns the string content the widget should display. For widgets like `NewsWidget` that manage their own scrolling, this might return a pre-calculated visible segment of a larger text.
+    *   `reconfigure(self, new_config, new_global_context)`: (Optional to override) Called when widget configuration changes or global context updates. Allows the widget to refresh its internal state (e.g., font size, data sources, or force a data re-fetch if relevant settings changed). The base implementation updates `self.config` and `self.global_context`.
     *   `get_config_options() -> list` (static method): Returns a list of dictionaries defining specific configuration options for the widget type. These are used to dynamically generate the configuration UI in `config.html`. The base implementation includes an `enable_logging` checkbox for widget-specific console logging.
 *   **Dynamic Loading**: At startup, `app.py` dynamically imports all `*_widget.py` modules from the `widgets/` directory.
 *   **Configuration (`config.html`)**:
@@ -181,23 +184,23 @@ The display content is generated and refreshed through a coordinated process bet
 
 **1. Backend Frame Preparation (`app.py` & `display.py`):**
 
-*   **Core Update Loop**: A background thread in `app.py` runs the `periodic_display_updater` function. This function is set to trigger by default every 50 milliseconds (controlled by `DISPLAY_UPDATE_INTERVAL` in `app.py`), aiming for approximately 20 frames per second (FPS).
+*   **Core Update Loop**: A background thread in `app.py` runs the `periodic_display_updater` function. This function is set to trigger by default every **50 milliseconds** (controlled by `DISPLAY_UPDATE_INTERVAL = 0.05` in `app.py`), aiming for approximately 20 frames per second (FPS) for smoother animations, especially for widgets like the scrolling `NewsWidget`. The loop includes logic to measure its own execution time and attempt to compensate for processing overhead to maintain the target interval, logging a performance warning if it significantly exceeds its budget.
 *   **Content Generation (`update_display_content`)**:
     *   Inside the loop, `update_display_content()` is called.
     *   It first clears a 64x64 pixel buffer (a 2D list of RGB tuples) managed by the `Display` class instance in `display.py`.
     *   It then determines the active screen and iterates through its configured and enabled widgets.
     *   For each widget:
         *   It ensures an instance exists (creating or reusing one).
-        *   It calls the widget's `reconfigure()` method, allowing the widget to update its internal state based on its latest configuration and the global context (e.g., current time).
-        *   It calls the widget's `get_content()` method to get the text/data to display.
-        *   The returned content is then drawn to the `pixel_buffer` using `matrix_display.draw_text()`, which translates characters into pixel patterns based on the selected font and color.
+        *   It calls the widget's `reconfigure()` method, allowing the widget to update its internal state based on its latest configuration and the global context (e.g., current time, font size changes). This is crucial for responsive updates without needing a full widget reload.
+        *   For most widgets, it calls `get_content()` to get the text/data to display. The returned content is then drawn to the `pixel_buffer` using `matrix_display.draw_text()`.
+        *   For the `NewsWidget`, which handles its own pixel-based scrolling, `app.py` calls `instance.update_scroll_state_and_get_text()` to update the scroll position and then `instance.get_current_pixel_offset()` to get the drawing offset. The full, un-clipped text is retrieved, and `app.py` draws it at `instance.x - pixel_offset`. *Correction (based on later summary): The `NewsWidget` now returns a pre-clipped segment via `get_content()` after `update_scroll_state()` is called separately by `app.py` if the widget type is 'news'. This optimization avoids drawing text that would be off-screen.* The actual drawing then happens at `instance.x` as the widget itself handles the clipping. Performance for text width calculation in scrolling widgets has been improved by caching character widths.
 *   **Data Serving (`/api/matrix_data`)**:
     *   The `pixel_buffer`, now containing the complete rendered frame, along with current widget dimensions, is made available via the `/api/matrix_data` Flask endpoint. This endpoint returns the data as a JSON payload.
 
 **2. Frontend Display Simulation (`templates/index.html`):**
 
 *   **Web Simulator**: The `index.html` page acts as a visual simulator for the LED matrix. It creates a grid of `<div>` elements, each representing a pixel.
-*   **Fetching Loop**: JavaScript within `index.html` (specifically in `initializeSimulator()`) uses `setInterval` to call the `fetchAndUpdateMatrix()` function. This interval is also currently set to 50 milliseconds to match the backend's target FPS.
+*   **Fetching Loop**: JavaScript within `index.html` (specifically in `initializeSimulator()`) uses `setInterval` to call the `fetchAndUpdateMatrix()` function. This interval is also currently set to **50 milliseconds** to match the backend's target FPS.
 *   **Rendering**:
     *   `fetchAndUpdateMatrix()` makes an asynchronous request to the backend's `/api/matrix_data` endpoint.
     *   Upon receiving the JSON data (which includes the `pixels` array), the JavaScript iterates through this array.
@@ -259,6 +262,16 @@ Displays Wi-Fi signal strength (RSSI).
 *   `text`: The static text string to display.
 *   `font_size`: Not explicitly a config option, but text widget will use default font or could be extended to support font_size.
 
+### News Widget (`news_widget.py`)
+Displays a horizontally scrolling bar of news headlines fetched from an RSS feed.
+*   `rss_url`: String, the URL of the RSS feed (e.g., "http://feeds.bbci.co.uk/news/rss.xml").
+*   `update_interval_minutes`: Number, how often to fetch new headlines from the RSS feed (e.g., 5).
+*   `num_headlines`: Number, how many of the latest headlines to cache and scroll (e.g., 5).
+*   `scroll_pixels_per_update`: Number, how many pixels to shift the text to the left on each display update cycle (e.g., 1). Higher values mean faster scrolling. The actual visual speed also depends on `DISPLAY_UPDATE_INTERVAL` in `app.py`.
+*   `font_size`: Select from available font sizes. The widget automatically uses the full matrix width for scrolling.
+*   Caching: Fetched headlines are cached. New headlines are only processed if they differ from the cache.
+*   Scrolling: Text scrolls pixel by pixel from right to left. The widget manages its own scroll position and calculates the visible segment of text to display, optimizing rendering. Character widths are cached for performance.
+
 ## Configuration
 
 *   **Screen Layouts & Widget Settings**: All screen and widget configurations are managed through the `/config` web page. This includes widget type, position (X, Y), color, enabled state, font size (where applicable), and widget-specific settings like time formats or weather location.
@@ -307,3 +320,13 @@ The target hardware setup is a Raspberry Pi connected to a 64x64 RGB LED Matrix 
     1.  The core application logic in `app.py` (managing screens, widgets, data) will remain largely unchanged.
     2.  The `Display` class in `display.py` will be adapted. Its `set_pixel` method (or a new `update_physical_matrix` method) would call the `rpi-rgb-led-matrix` library functions to send the `pixel_buffer` to the physical LED matrix.
     3.  The web server component can remain for remote configuration, control, and simulation even when the hardware is active.
+
+## Known Issues & Potential Enhancements
+
+*   **Backend**: Consider Flask Blueprints for better route organization as complexity grows. Abstracting business logic into a service layer could be beneficial.
+*   **Frontend**: Refactoring JavaScript into ES6 modules.
+*   **Widget System**:
+    *   **Live Preview in Config**: This remains a valuable future goal.
+    *   **Widget Dimensions**: Currently, widgets are single lines of text. Allowing widgets to define their own width/height and render multi-line content within those bounds would be a major upgrade.
+*   **Testing**: Introduce unit tests for backend logic and widget functionality.
+*   **Hardware Integration**: Adapting `display.py` to drive a physical Raspberry Pi LED matrix (e.g., using `rpi-rgb-led-matrix`) is still a key long-term goal.
