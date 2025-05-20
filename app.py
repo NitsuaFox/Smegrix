@@ -34,7 +34,7 @@ active_widget_instances = {} # Stores active widget instances: widget_id -> inst
 # Lock for synchronizing access to shared resources like screen_layouts, current_display_mode, and matrix_display
 data_lock = threading.Lock()
 
-DISPLAY_UPDATE_INTERVAL = 1 # seconds
+DISPLAY_UPDATE_INTERVAL = 0.05 # seconds - Increased for smoother animation (was 1.0)
 MATRIX_DATA_LOGGING_ENABLED = True # Global flag for matrix_data route logging
 current_frame_widget_dimensions = [] # Stores dimensions of widgets in the current frame
 
@@ -397,7 +397,9 @@ def update_display_content():
         global_widget_context = {
             'now': now,
             'ssid': ssid_val,
-            'rssi': rssi_val
+            'rssi': rssi_val,
+            'get_text_dimensions': matrix_display.get_text_dimensions,
+            'matrix_width': MATRIX_WIDTH
         }
 
         if not widgets_on_current_screen_config:
@@ -433,8 +435,14 @@ def update_display_content():
                         active_widget_instances[widget_id] = instance
                         print(f"Created new instance for widget ID: {widget_id} of type {widget_type}")
                     
-                    content = instance.get_content()
-                    if content: 
+                    # --- Determine text content and drawing parameters ---
+                    # For NewsWidget, get_content() now handles updating scroll state 
+                    # and returning the correctly clipped visible segment.
+                    # The pixel offset is managed internally by the widget.
+                    text_to_draw = instance.get_content()
+                    final_draw_x = instance.x # Draw the returned segment at the widget's base x
+
+                    if text_to_draw: 
                         rgb_color_tuple = hex_to_rgb(instance.color)
                         font_name_to_pass = None
                         if hasattr(instance, 'font_size'):
@@ -445,7 +453,7 @@ def update_display_content():
                         
                         # Calculate and store dimensions
                         try:
-                            width_cells, height_cells = matrix_display.get_text_dimensions(content, font_name_to_pass)
+                            width_cells, height_cells = matrix_display.get_text_dimensions(text_to_draw, font_name_to_pass)
                             new_dimensions_this_frame.append({
                                 'id': widget_id,
                                 'width_cells': width_cells,
@@ -460,7 +468,7 @@ def update_display_content():
                                 'height_cells': 7  # Fallback height (e.g. for 5x7 font)
                             })
 
-                        matrix_display.draw_text(content, instance.x, instance.y, color_tuple=rgb_color_tuple, font_name=font_name_to_pass)
+                        matrix_display.draw_text(text_to_draw, final_draw_x, instance.y, color_tuple=rgb_color_tuple, font_name=font_name_to_pass)
                 except Exception as e:
                     print(f"Error processing widget '{widget_config.get('id', widget_type)}': {e}")
             else:
@@ -508,15 +516,31 @@ def set_matrix_logging_status():
 def periodic_display_updater():
     """Periodically calls update_display_content in a background thread."""
     print("Starting periodic display updater thread...")
+    last_loop_finish_time = time.monotonic()
     while True:
+        loop_start_time = time.monotonic()
+        # Precise timing log
+        now_for_log = datetime.datetime.now()
+        actual_cycle_time_ms = (loop_start_time - last_loop_finish_time) * 1000
+        # print(f"[{now_for_log.strftime('%H:%M:%S.%f')[:-3]}] Periodic_updater: cycle start. Actual time since last cycle finish: {actual_cycle_time_ms:.2f}ms")
+
         try:
-            # print(f"Background thread: calling update_display_content() at {time.time()}") # Debug
             update_display_content() 
-            time.sleep(DISPLAY_UPDATE_INTERVAL) 
+            
+            processing_time = time.monotonic() - loop_start_time
+            sleep_duration = DISPLAY_UPDATE_INTERVAL - processing_time
+            
+            if sleep_duration < 0:
+                sleep_duration = 0 
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]}] [PERF_WARNING] Display update took {processing_time*1000:.2f}ms, exceeding interval of {DISPLAY_UPDATE_INTERVAL*1000:.2f}ms.")
+
+            # print(f"Display update processing: {processing_time*1000:.2f}ms, sleeping for: {sleep_duration*1000:.2f}ms") # Verbose
+            time.sleep(sleep_duration) 
+            last_loop_finish_time = time.monotonic()
         except Exception as e:
             print(f"Error in periodic_display_updater: {e}")
-            # Avoid busy-looping on repeated errors in the updater itself
-            time.sleep(5) # Sleep longer if there was an error in the update logic
+            time.sleep(5) 
+            last_loop_finish_time = time.monotonic() # Update here too to avoid false long cycle time after error
 
 if __name__ == '__main__':
     load_widget_classes()

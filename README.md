@@ -175,6 +175,42 @@ The widget system is designed to be modular and extensible.
 3.  The application will automatically pick up the new widget type upon restart.
 4.  The configuration UI (`/config`) will show "My New" (derived from class name `MyNewWidget`) in the "Add New Widget" modal, and its custom options will be available when configuring an instance of it.
 
+## Rendering Pipeline and Display Refresh
+
+The display content is generated and refreshed through a coordinated process between the Python backend and the JavaScript frontend simulator.
+
+**1. Backend Frame Preparation (`app.py` & `display.py`):**
+
+*   **Core Update Loop**: A background thread in `app.py` runs the `periodic_display_updater` function. This function is set to trigger by default every 50 milliseconds (controlled by `DISPLAY_UPDATE_INTERVAL` in `app.py`), aiming for approximately 20 frames per second (FPS).
+*   **Content Generation (`update_display_content`)**:
+    *   Inside the loop, `update_display_content()` is called.
+    *   It first clears a 64x64 pixel buffer (a 2D list of RGB tuples) managed by the `Display` class instance in `display.py`.
+    *   It then determines the active screen and iterates through its configured and enabled widgets.
+    *   For each widget:
+        *   It ensures an instance exists (creating or reusing one).
+        *   It calls the widget's `reconfigure()` method, allowing the widget to update its internal state based on its latest configuration and the global context (e.g., current time).
+        *   It calls the widget's `get_content()` method to get the text/data to display.
+        *   The returned content is then drawn to the `pixel_buffer` using `matrix_display.draw_text()`, which translates characters into pixel patterns based on the selected font and color.
+*   **Data Serving (`/api/matrix_data`)**:
+    *   The `pixel_buffer`, now containing the complete rendered frame, along with current widget dimensions, is made available via the `/api/matrix_data` Flask endpoint. This endpoint returns the data as a JSON payload.
+
+**2. Frontend Display Simulation (`templates/index.html`):**
+
+*   **Web Simulator**: The `index.html` page acts as a visual simulator for the LED matrix. It creates a grid of `<div>` elements, each representing a pixel.
+*   **Fetching Loop**: JavaScript within `index.html` (specifically in `initializeSimulator()`) uses `setInterval` to call the `fetchAndUpdateMatrix()` function. This interval is also currently set to 50 milliseconds to match the backend's target FPS.
+*   **Rendering**:
+    *   `fetchAndUpdateMatrix()` makes an asynchronous request to the backend's `/api/matrix_data` endpoint.
+    *   Upon receiving the JSON data (which includes the `pixels` array), the JavaScript iterates through this array.
+    *   For each pixel's RGB data, it updates the `backgroundColor` style of the corresponding `<div>` element in the grid. This "paints" the frame received from the backend onto the web page.
+
+**Synchronization & Flow:**
+
+The backend is responsible for preparing a complete, ready-to-display frame in its `pixel_buffer`. The frontend then periodically polls for this latest complete frame and renders it. The alignment of the backend's `DISPLAY_UPDATE_INTERVAL` and the frontend's `setInterval` polling rate is key to achieving smooth visual updates.
+
+**Future Hardware Integration:**
+
+This architecture, centered around an in-memory `pixel_buffer`, is well-suited for future integration with physical LED matrix hardware (e.g., a WaveShare display on a Raspberry Pi). The backend's frame preparation logic would remain largely the same. The primary change would involve adding code to take the `pixel_buffer` and send it to the hardware using a specific driver library (like `rpi-rgb-led-matrix`), replacing or augmenting the current web-based rendering.
+
 ## Widget Configuration Placeholders & Specifics
 
 This section details notable configuration options and placeholders for specific widgets. Common options like `x`, `y`, `color`, `enabled`, `font_size` (for relevant widgets), and `enable_logging` (for verbose terminal output from a widget instance) are generally available.
