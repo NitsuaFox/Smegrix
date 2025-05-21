@@ -60,22 +60,29 @@ def load_widget_classes():
     global AVAILABLE_WIDGETS
     widgets_path = os.path.join(os.path.dirname(__file__), 'widgets')
     if not os.path.isdir(widgets_path):
-        print(f"Warning: Widgets directory not found at {widgets_path}")
+        print(f"DEBUG: Widgets directory not found at {widgets_path}")
         return
 
+    print("DEBUG: Starting widget class loading...")
     for filename in os.listdir(widgets_path):
         if filename.endswith('_widget.py'): # Convention: widget_type_widget.py
             module_name_full = f"widgets.{filename[:-3]}"
             widget_type_key = filename[:-10] # Extracts 'time' from 'time_widget.py'
+            print(f"DEBUG: Attempting to load module: {module_name_full} for key: {widget_type_key}")
             try:
                 module = importlib.import_module(module_name_full)
+                print(f"DEBUG: Successfully imported module: {module_name_full}")
                 for name, cls in inspect.getmembers(module, inspect.isclass):
+                    print(f"DEBUG: Checking class '{name}' in module '{module_name_full}'")
                     # Check if it's a subclass of BaseWidget and actually defined in this module (not imported)
                     if issubclass(cls, BaseWidget) and cls is not BaseWidget and cls.__module__ == module_name_full:
+                        print(f"DEBUG: Found valid widget class '{name}' for key '{widget_type_key}'")
                         if widget_type_key in AVAILABLE_WIDGETS:
                             print(f"Warning: Duplicate widget type key '{widget_type_key}' found. Overwriting.")
                         AVAILABLE_WIDGETS[widget_type_key] = cls
                         print(f"Successfully loaded widget: {name} as type '{widget_type_key}'")
+                        if widget_type_key == "news": # Specifically for news widget
+                            print(f"DEBUG: NEWS WIDGET '{name}' SUCCESSFULLY REGISTERED AS '{widget_type_key}'")
             except ImportError as e:
                 print(f"Error importing widget module {module_name_full}: {e}")
             except Exception as e:

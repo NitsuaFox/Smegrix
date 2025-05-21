@@ -53,7 +53,13 @@
                 "x": 0,
                 "y": 57,
                 "enabled": true,
-                "color": "#ffffff"
+                "color": "#ffffff",
+                "enable_logging": true,
+                "rss_url": "http://feeds.bbci.co.uk/news/rss.xml",
+                "update_interval_minutes": 5,
+                "num_headlines": 5,
+                "scroll_interval_ms": 50,
+                "font_size": "small"
             }
         ]
     },
