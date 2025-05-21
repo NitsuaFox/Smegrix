@@ -33,8 +33,8 @@
                 "ntp_timeout": 5,
                 "time_format": "%H:%M",
                 "type": "time",
-                "x": 8,
-                "y": 25
+                "x": 15,
+                "y": 10
             },
             {
                 "color": "#0062ff",
@@ -59,7 +59,7 @@
                 "type": "news",
                 "update_interval_minutes": 5,
                 "x": 0,
-                "y": 59
+                "y": 58
             }
         ]
     },
@@ -72,7 +72,7 @@
                 "display_format": "NOW:{temp}{unit_symbol}",
                 "enable_logging": false,
                 "enabled": true,
-                "font_size": "large",
+                "font_size": "xl",
                 "id": "Weather-Temp",
                 "latitude": 54.61,
                 "location_name": "Billingham,UK",
@@ -81,7 +81,7 @@
                 "type": "weather",
                 "units": "metric",
                 "update_interval_minutes": 30,
-                "x": 14,
+                "x": 3,
                 "y": 13
             },
             {

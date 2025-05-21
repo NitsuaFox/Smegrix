@@ -5,64 +5,81 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Configure Screen Layouts - Matrix Simulator</title>
     <style>
-        :root {
-            --primary-color: #61dafb;
-            --primary-hover: #52c5e7;
-            --bg-color: #282c34;
-            --container-bg: #20232a;
-            --input-bg: #333842;
-            --text-color: #fff;
-            --text-secondary: #ccc;
-            --border-color: #444;
-            --success-color: #28a745;
-            --error-color: #dc3545;
-            --delete-color: #f44336;
-            --add-color: #4CAF50;
-            --cancel-color: #777;
-        }
         body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: Arial, sans-serif;
             margin: 0;
-            padding: 10px;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            line-height: 1.5;
-        }
-        h1, h2 {
-            color: var(--primary-color);
+            padding: 20px;
+            background-color: #f5f5f5;
         }
         .container {
-            background-color: var(--container-bg);
-            padding: 20px;
-            border-radius: 8px;
             max-width: 1200px;
-            margin-left: auto;
-            margin-right: auto;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            margin: 0 auto;
         }
-        .widget-config {
-            border: 1px solid var(--border-color);
-            padding: 15px;
-            margin-bottom: 15px;
+        .header {
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
             border-radius: 5px;
-            background-color: var(--bg-color);
-            transition: all 0.2s ease;
+            margin-bottom: 20px;
         }
-        .widget-config:hover {
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        .card {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
         }
-        .widget-config h3 {
-            margin-top: 0;
-            color: var(--primary-color);
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 8px;
-            margin-bottom: 15px;
+        .flex-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
         }
+        .navbar {
+            background-color: #333;
+            overflow: hidden;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .navbar a {
+            float: left;
+            display: block;
+            color: white;
+            text-align: center;
+            padding: 14px 16px;
+            text-decoration: none;
+        }
+        .navbar a:hover {
+            background-color: #ddd;
+            color: black;
+        }
+        .navbar a.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .button-blue {
+            background-color: #2196F3;
+        }
+        .button-red {
+            background-color: #dc3545;
+        }
+        
         label {
             display: block;
             margin-top: 10px;
             margin-bottom: 5px;
-            color: var(--text-secondary);
             font-weight: 500;
         }
         input[type="text"], input[type="number"], select {
@@ -70,53 +87,16 @@
             padding: 10px;
             margin-bottom: 10px;
             border-radius: 4px;
-            border: 1px solid var(--border-color);
-            background-color: var(--input-bg);
-            color: var(--text-color);
+            border: 1px solid #ccc;
+            background-color: white;
+            color: #333;
             box-sizing: border-box;
-            transition: border-color 0.2s;
-        }
-        input[type="text"]:focus, input[type="number"]:focus, select:focus {
-            border-color: var(--primary-color);
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(97, 218, 251, 0.25);
         }
         input[type="checkbox"] {
             margin-right: 5px;
             vertical-align: middle;
-            transform: scale(1.2);
         }
-        .controls {
-            margin-top: 20px;
-            text-align: right;
-        }
-        button {
-            background-color: var(--primary-color);
-            color: var(--container-bg);
-            border: none;
-            padding: 12px 25px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.2s;
-            font-weight: 500;
-        }
-        button:hover {
-            background-color: var(--primary-hover);
-            transform: translateY(-1px);
-        }
-        button:active {
-            transform: translateY(1px);
-        }
-        a {
-            color: var(--primary-color);
-            text-decoration: none;
-            transition: color 0.2s;
-        }
-        a:hover {
-            text-decoration: underline;
-            color: var(--primary-hover);
-        }
+        
         .message {
             padding: 10px;
             margin-top: 15px;
@@ -129,19 +109,14 @@
             to { opacity: 1; transform: translateY(0); }
         }
         .message.success {
-            background-color: var(--success-color);
+            background-color: #28a745;
             color: white;
         }
         .message.error {
-            background-color: var(--error-color);
+            background-color: #dc3545;
             color: white;
         }
-        #screenSelectorContainer {
-            margin-bottom: 20px;
-        }
-        #screenManagementContainer button {
-            margin-left: 10px;
-        }
+        
         .modal {
             display: none;
             position: fixed; 
@@ -155,14 +130,14 @@
             animation: fadeIn 0.2s;
         }
         .modal-content {
-            background-color: #2c303a;
+            background-color: white;
             margin: 10% auto; 
             padding: 25px;
-            border: 1px solid #555;
+            border: 1px solid #ccc;
             width: 90%; 
             max-width: 500px;
-            border-radius: 8px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
             animation: slideIn 0.3s;
         }
         @keyframes slideIn {
@@ -170,16 +145,8 @@
             to { transform: translateY(0); opacity: 1; }
         }
         .modal-content h3 {
-            color: var(--primary-color);
+            color: #333;
             margin-top: 0;
-        }
-        .modal-content label {
-            color: #ddd;
-        }
-        .modal-content input[type="text"], .modal-content select {
-            background-color: #3b3f48;
-            border-color: #555;
-            width: 100%;
         }
         .modal-controls {
             display: flex;
@@ -190,14 +157,24 @@
             margin-left: 10px;
         }
         
+        .widget-config {
+            border: 1px solid #eee;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .widget-config h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+        }
+        
         /* Responsive styles */
         @media (max-width: 768px) {
-            body {
-                padding: 5px;
-            }
             .container {
                 padding: 15px;
-                border-radius: 0;
             }
             button {
                 padding: 10px 15px;
@@ -271,17 +248,14 @@
             width: 100px;
             margin-bottom: 0;
         }
-        .btn-delete {
-            background-color: var(--delete-color);
-        }
         .badge {
             display: inline-block;
             padding: 3px 8px;
             border-radius: 12px;
             font-size: 12px;
             font-weight: bold;
-            background-color: var(--primary-color);
-            color: var(--container-bg);
+            background-color: #4CAF50;
+            color: white;
             margin-left: 8px;
         }
         .widget-header {
@@ -299,13 +273,13 @@
         .widget-toggle-btn {
             background: none;
             border: none;
-            color: var(--primary-color);
+            color: #2196F3;
             font-size: 1.2em;
             cursor: pointer;
             padding: 5px;
         }
         .widget-toggle-btn:hover {
-            color: var(--primary-hover);
+            color: #0b7dda;
         }
         .widget-content-collapsible {
             max-height: 2000px;
@@ -313,7 +287,7 @@
             transition: max-height 0.3s ease-in-out, padding-top 0.3s ease-in-out, padding-bottom 0.3s ease-in-out;
             padding-top: 15px;
             padding-bottom: 15px;
-            border-top: 1px solid var(--border-color);
+            border-top: 1px solid #eee;
             margin-top: -15px;
         }
         .widget-content-collapsible.collapsed {
@@ -321,21 +295,7 @@
             padding-top: 0;
             padding-bottom: 0;
         }
-        /* Spinner and loading styles */
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: var(--primary-color);
-            animation: spin 1s ease-in-out infinite;
-            margin-right: 10px;
-            vertical-align: middle;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        /* Loading overlay */
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -357,6 +317,20 @@
             visibility: visible;
             opacity: 1;
         }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #4CAF50;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
         .loading-overlay .spinner {
             width: 50px;
             height: 50px;
@@ -367,35 +341,97 @@
             font-size: 18px;
             font-weight: 500;
         }
+        /* Screen management specific styles */
+        .screen-management {
+            margin-bottom: 20px;
+        }
+        .screen-management-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .screen-management-header h3 {
+            margin: 0;
+            color: #333;
+        }
+        .screen-management-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .screen-selector-container {
+            margin-bottom: 15px;
+        }
+        .screen-selector-label {
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        .screen-selector {
+            width: 100%;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            background-color: white;
+            font-size: 16px;
+            color: #333;
+        }
+        /* Improved widget config header */
+        .widget-config-header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .widget-config-header h2 {
+            margin: 0;
+            color: #333;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Configure Screen Layouts</h1>
-        <p><a href="/">&laquo; Back to Simulator</a></p>
-
-        <div id="screenManagementContainer" style="background-color: var(--bg-color); padding: 15px; border-radius: 5px; margin-bottom: 20px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;">
-            <h3 style="margin:0; color: var(--primary-color); flex: 1 1 auto; margin-bottom: 10px;">Screen Management</h3>
-            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-                <button type="button" id="addNewScreenButton" style="background-color: var(--add-color);">Add New Screen</button>
-                <button type="button" id="removeSelectedScreenButton" style="background-color: var(--delete-color);">Remove Selected Screen</button>
-            </div>
+        <div class="navbar">
+            <a href="/">Home</a>
+            <a href="/config" class="active">Configuration</a>
+            <a href="/performance">Performance</a>
+        </div>
+        
+        <div class="header">
+            <h1>Configure Screen Layouts</h1>
         </div>
 
-        <div id="screenSelectorContainer" style="background-color: var(--bg-color); padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-            <label for="screenSelector" style="font-weight: bold; color: var(--text-color); margin-bottom: 10px;">Select Screen to Configure:</label>
-            <select id="screenSelector" style="width: 100%; max-width: 400px;"></select>
+        <div class="card screen-management">
+            <div class="screen-management-header">
+                <h3>Screen Management</h3>
+                <div class="screen-management-buttons">
+                    <button type="button" id="addNewScreenButton" class="button">Add New Screen</button>
+                    <button type="button" id="removeSelectedScreenButton" class="button button-red">Remove Selected Screen</button>
+                </div>
+            </div>
+            
+            <div class="screen-selector-container">
+                <div class="screen-selector-label">
+                    <label for="screenSelector">Select Screen to Configure:</label>
+                </div>
+                <select id="screenSelector" class="screen-selector"></select>
+            </div>
         </div>
         
         <form id="widgetsForm">
-            <h2 id="currentScreenName" style="text-align: center; padding-bottom: 10px; border-bottom: 1px solid var(--border-color);"></h2>
-            <div id="widget-list-container">
-                <p>Select a screen to see its widgets.</p>
-            </div>
+            <div class="card">
+                <div class="widget-config-header">
+                    <h2 id="currentScreenName">Select a screen above</h2>
+                </div>
+                <div id="widget-list-container">
+                    <p>Select a screen to see its widgets.</p>
+                </div>
 
-            <div class="controls">
-                <button type="button" id="addNewWidgetButton" style="margin-right:10px; background-color: var(--add-color);">Add New Widget to this Screen</button>
-                <button type="submit" id="saveAllConfigsButton">Save All Layouts</button>
+                <div class="controls" style="text-align: right; margin-top: 20px;">
+                    <button type="button" id="addNewWidgetButton" class="button">Add New Widget to this Screen</button>
+                    <button type="submit" id="saveAllConfigsButton" class="button button-blue">Save All Layouts</button>
+                </div>
             </div>
         </form>
         <div id="message-area"></div>
@@ -412,8 +448,8 @@
             <input type="text" id="newWidgetIdInput" placeholder="E.g., my_time_widget" required>
 
             <div class="modal-controls">
-                <button type="button" id="cancelAddWidgetBtn" style="background-color:var(--cancel-color);">Cancel</button>
-                <button type="button" id="confirmAddWidgetBtn">Add Widget</button>
+                <button type="button" id="cancelAddWidgetBtn" class="button button-red">Cancel</button>
+                <button type="button" id="confirmAddWidgetBtn" class="button">Add Widget</button>
             </div>
         </div>
     </div>
@@ -425,7 +461,7 @@
             <div class="form-group">
                 <label for="newScreenIdInput">Screen ID:</label>
                 <input type="text" id="newScreenIdInput" placeholder="E.g., living_room_display">
-                <small style="display:block; margin-bottom:10px; color:#aaa;">Unique identifier (letters, numbers, _, -).</small>
+                <small style="display:block; margin-bottom:10px; color:#777;">Unique identifier (letters, numbers, _, -).</small>
             </div>
             
             <div class="form-group">
@@ -434,8 +470,8 @@
             </div>
             
             <div class="modal-controls">
-                <button type="button" id="cancelAddScreenBtn" style="background-color:var(--cancel-color);">Cancel</button>
-                <button type="button" id="confirmAddScreenBtn">Add Screen</button>
+                <button type="button" id="cancelAddScreenBtn" class="button button-red">Cancel</button>
+                <button type="button" id="confirmAddScreenBtn" class="button">Add Screen</button>
             </div>
         </div>
     </div>
