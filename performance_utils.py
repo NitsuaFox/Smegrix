@@ -137,6 +137,11 @@ class RaspberryPiOptimizer:
     
     def _create_optimization_script(self, gpu_mem, disable_overscan, disable_hdmi_blanking, disable_audio):
         """Create a script that can be run with sudo to apply optimizations"""
+        core_count = psutil.cpu_count()
+        governor_commands = ""
+        for i in range(core_count):
+            governor_commands += f"echo \"performance\" > /sys/devices/system/cpu/cpu{i}/cpufreq/scaling_governor\n"
+
         script_content = f"""#!/bin/bash
 # Raspberry Pi Performance Optimization Script
 # Run with sudo: sudo bash {os.path.abspath('optimize_raspberry_pi.sh')}
@@ -160,6 +165,10 @@ grep -q "^hdmi_blanking=" $CONFIG && sed -i "s/^hdmi_blanking=.*/hdmi_blanking={
 
 # Audio
 grep -q "^dtparam=audio=" $CONFIG && sed -i "s/^dtparam=audio=.*/dtparam=audio={'off' if disable_audio else 'on'}/" $CONFIG || echo "dtparam=audio={'off' if disable_audio else 'on'}" >> $CONFIG
+
+echo "[PI_OPT] Setting CPU governor to performance..."
+{governor_commands}
+echo "[PI_OPT] CPU governor commands added to script."
 
 echo "[PI_OPT] Optimizations applied. Original config backed up to $CONFIG.backup"
 echo "[PI_OPT] Reboot recommended: sudo reboot"
@@ -198,13 +207,14 @@ echo "[PI_OPT] Reboot recommended: sudo reboot"
                 return True
                 
             # This would typically require sudo, so we'll just print the command
-            print(f"[PI_OPT] To set CPU governor to {governor}, run:")
-            core_count = psutil.cpu_count()
-            for i in range(core_count):
-                print(f"[PI_OPT] sudo sh -c 'echo {governor} > /sys/devices/system/cpu/cpu{i}/cpufreq/scaling_governor'")
+            # The actual commands are now added to the script in _create_optimization_script
+            print(f"[PI_OPT] To set CPU governor to {governor}, ensure optimize_raspberry_pi.sh is run with sudo.")
+            # core_count = psutil.cpu_count() # No longer needed to print here
+            # for i in range(core_count):
+            #     print(f"[PI_OPT] sudo sh -c 'echo {governor} > /sys/devices/system/cpu/cpu{i}/cpufreq/scaling_governor'")
                 
-            print(f"[PI_OPT] Added command to optimization script")
-            return True
+            # print(f"[PI_OPT] Added command to optimization script") # This message is now misleading here
+            return True # Assume the script will handle it
         except Exception as e:
             print(f"[PI_OPT] Error setting CPU governor: {e}")
             return False
@@ -212,7 +222,7 @@ echo "[PI_OPT] Reboot recommended: sudo reboot"
     def get_system_stats(self):
         """Get current system statistics"""
         stats = {
-            "cpu_percent": psutil.cpu_percent(interval=0.1),
+            "cpu_percent": psutil.cpu_percent(interval=0.02),
             "memory_percent": psutil.virtual_memory().percent,
             "temperature": self._get_cpu_temperature() if self.is_raspberry_pi else "N/A",
             "cpu_frequency": self._get_cpu_frequency() if self.is_raspberry_pi else "N/A"

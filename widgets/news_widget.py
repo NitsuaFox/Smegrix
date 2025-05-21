@@ -3,6 +3,7 @@ import time
 import feedparser # For RSS parsing
 from .base_widget import BaseWidget
 import requests # feedparser might use it or have its own http client
+import threading # Added for background fetching
 
 class NewsWidget(BaseWidget):
     """Displays scrolling news headlines fetched from an RSS feed."""
@@ -13,6 +14,7 @@ class NewsWidget(BaseWidget):
     DEFAULT_SCROLL_INTERVAL_MS = 50 # Time in ms between 1-pixel shifts
     HEADLINE_SEPARATOR = "  •••  " 
     SCROLL_PADDING = "     " 
+    INITIAL_LOADING_MESSAGE = "Loading news..."
 
     def __init__(self, config: dict, global_context: dict = None):
         super().__init__(config, global_context)
@@ -26,70 +28,144 @@ class NewsWidget(BaseWidget):
 
         self.headlines_cache = []
         self.last_fetch_time = 0
-        self.current_scroll_text = ""
+        self.current_scroll_text = self.INITIAL_LOADING_MESSAGE # Initial state
         self.current_pixel_offset = 0
         self.text_is_scrollable = False
         self.looping_point_pixels = 0 
         self.time_of_last_pixel_shift = time.monotonic()
         self.char_widths_cache = {} # For caching individual character widths
 
-        self._prev_rss_url = self.rss_url
-        self._prev_num_headlines = self.num_headlines
-
-        self._fetch_news()
-        self._build_and_measure_scroll_text()
-
-    def reconfigure(self):
-        super().reconfigure()
-        old_rss_url = self.rss_url 
-        old_num_headlines = self.num_headlines
-        old_font_size = self.font_size
-        old_scroll_interval_ms = self.scroll_interval_ms
-
-        self.rss_url = self.config.get('rss_url', self.DEFAULT_RSS_URL)
-        self.update_interval_minutes = self.config.get('update_interval_minutes', self.DEFAULT_UPDATE_INTERVAL_MINS)
-        self.num_headlines = self.config.get('num_headlines', self.DEFAULT_NUM_HEADLINES)
-        self.font_size = self.config.get('font_size', "medium")
-        self.scroll_interval_ms = self.config.get('scroll_interval_ms', self.DEFAULT_SCROLL_INTERVAL_MS)
-        self.scroll_interval_seconds = self.scroll_interval_ms / 1000.0
-
-        config_affecting_fetch_changed = (old_rss_url != self.rss_url or old_num_headlines != self.num_headlines)
-        font_size_changed = old_font_size != self.font_size
-        scroll_speed_changed = old_scroll_interval_ms != self.scroll_interval_ms
-
-        if config_affecting_fetch_changed:
-            self._log("INFO", "News widget fetch-related configuration changed, forcing news fetch.")
-            if self._fetch_news(force_fetch=True):
-                self._build_and_measure_scroll_text()
-            else:
-                self._build_and_measure_scroll_text()
-            self.current_pixel_offset = 0
-            self.time_of_last_pixel_shift = time.monotonic() # Reset timer if text content changes
-        elif font_size_changed:
-            self._log("INFO", "Font size changed, remeasuring scroll text & char widths.")
-            self._build_and_measure_scroll_text()
-            self.current_pixel_offset = 0
-            self.time_of_last_pixel_shift = time.monotonic() # Reset timer if text metrics change
-        elif scroll_speed_changed:
-            # Only scroll speed changed, no need to remeasure, just reset timer baseline
-            self.time_of_last_pixel_shift = time.monotonic()
+        # Threading attributes
+        self.data_lock = threading.Lock()
+        self.is_fetching = False
+        self.fetch_thread = None
         
         self._prev_rss_url = self.rss_url
         self._prev_num_headlines = self.num_headlines
 
-    def _fetch_news(self, force_fetch=False):
-        current_time = time.monotonic(); updated_content = False 
-        if not force_fetch and self.last_fetch_time != 0 and (current_time - self.last_fetch_time) / 60 < self.update_interval_minutes: return False 
-        self._log("DEBUG", f"Attempting news fetch from {self.rss_url}{' (forced)' if force_fetch else ''}") # Changed to DEBUG for less noise
+        # Initial fetch and build
+        self._trigger_fetch_if_needed(force_fetch=True) # Start initial fetch
+        self._build_and_measure_scroll_text() # Build with loading/empty message initially
+
+    def reconfigure(self):
+        super().reconfigure()
+        
+        with self.data_lock: # Protect config reads and state changes
+            old_rss_url = self.rss_url 
+            old_num_headlines = self.num_headlines
+            old_font_size = self.font_size
+            old_scroll_interval_ms = self.scroll_interval_ms
+
+            self.rss_url = self.config.get('rss_url', self.DEFAULT_RSS_URL)
+            self.update_interval_minutes = self.config.get('update_interval_minutes', self.DEFAULT_UPDATE_INTERVAL_MINS)
+            self.num_headlines = self.config.get('num_headlines', self.DEFAULT_NUM_HEADLINES)
+            self.font_size = self.config.get('font_size', "medium")
+            self.scroll_interval_ms = self.config.get('scroll_interval_ms', self.DEFAULT_SCROLL_INTERVAL_MS)
+            self.scroll_interval_seconds = self.scroll_interval_ms / 1000.0
+
+            config_affecting_fetch_changed = (old_rss_url != self.rss_url or old_num_headlines != self.num_headlines)
+            font_size_changed = old_font_size != self.font_size
+            scroll_speed_changed = old_scroll_interval_ms != self.scroll_interval_ms
+
+            rebuild_text_and_reset_scroll = False
+
+            if config_affecting_fetch_changed:
+                self._log("INFO", "News widget fetch-related configuration changed.")
+                self._trigger_fetch_if_needed(force_fetch=True)
+                rebuild_text_and_reset_scroll = True 
+            
+            if font_size_changed: # If only font size changed, or also if fetch config changed
+                self._log("INFO", "Font size changed for news widget.")
+                rebuild_text_and_reset_scroll = True
+
+            if rebuild_text_and_reset_scroll:
+                # Always rebuild. If fetching, it will use current cache (or loading message).
+                # When fetch completes, update_scroll_state will rebuild again if data changed.
+                self._build_and_measure_scroll_text() 
+                self.current_pixel_offset = 0
+                self.time_of_last_pixel_shift = time.monotonic()
+            elif scroll_speed_changed:
+                self.time_of_last_pixel_shift = time.monotonic()
+            
+            self._prev_rss_url = self.rss_url
+            self._prev_num_headlines = self.num_headlines
+
+
+    def _fetch_news_background(self):
+        """Fetches news data in a background thread and updates cache."""
+        local_rss_url = self.rss_url # Use consistent value for this fetch run
+        local_num_headlines = self.num_headlines
+
+        self._log("DEBUG", f"Background news fetch started for {local_rss_url}")
+        
+        new_headlines = []
+        fetch_error = None
         try:
-            feed = feedparser.parse(self.rss_url)
-            if feed.bozo: ex = feed.bozo_exception; self._log("ERROR", f"Error parsing RSS: {str(ex)}"); self.last_fetch_time = current_time; return False 
-            new_h = [e.title.strip() for e in feed.entries[:self.num_headlines] if hasattr(e, 'title')]
-            if self.headlines_cache != new_h: self.headlines_cache = new_h; updated_content = True
-            if updated_content: self._log("INFO", f"News updated: {len(self.headlines_cache)} hdl.")
-            elif force_fetch: self._log("DEBUG", "Forced fetch, no changes.") # Changed to DEBUG
-            self.last_fetch_time = current_time; return updated_content
-        except Exception as e: self._log("ERROR", f"RSS fetch error: {e}"); self.last_fetch_time = current_time; return False
+            # It's important that feedparser's underlying socket operations have timeouts.
+            # feedparser.parse itself doesn't take a direct timeout argument.
+            # Default timeouts in urllib (often used by feedparser) can be long.
+            # Consider adding a requests wrapper with explicit timeout if feedparser is too slow.
+            feed = feedparser.parse(local_rss_url) 
+            if feed.bozo:
+                fetch_error = f"Error parsing RSS: {str(feed.bozo_exception)}"
+            else:
+                new_headlines = [e.title.strip() for e in feed.entries[:local_num_headlines] if hasattr(e, 'title')]
+        except Exception as e:
+            fetch_error = f"RSS fetch exception: {e}"
+        
+        with self.data_lock:
+            if fetch_error:
+                self._log("ERROR", fetch_error)
+                # Potentially set a status like "Fetch Error" if headlines_cache is empty
+                if not self.headlines_cache:
+                    self.headlines_cache = ["Error fetching news."] 
+            elif self.headlines_cache != new_headlines:
+                self.headlines_cache = new_headlines
+                if not self.headlines_cache: # If fetch was successful but returned no headlines
+                    self.headlines_cache = ["No news headlines found."]
+                self._log("INFO", f"News cache updated with {len(self.headlines_cache)} headlines.")
+                # Data changed, so next get_content will trigger a rebuild of scroll text
+            else:
+                self._log("DEBUG", "Background news fetch complete, no changes to headlines.")
+
+            self.last_fetch_time = time.monotonic()
+            self.is_fetching = False
+            # After fetch, text might need rebuilding, this will be handled by update_scroll_state
+            # calling _build_and_measure_scroll_text if news_updated_flag is set by _trigger_fetch_if_needed
+
+
+    def _trigger_fetch_if_needed(self, force_fetch=False) -> bool:
+        """
+        Checks if a news fetch is required based on time or force_fetch.
+        If so, and not already fetching, starts a background fetch.
+        Returns True if new data was fetched or fetch was initiated, False otherwise.
+        This version doesn't directly return if data *changed*, but if a fetch *process* occurred.
+        The actual data change is handled by _fetch_news_background updating headlines_cache.
+        """
+        current_time = time.monotonic()
+        news_fetch_initiated_or_needed = False
+
+        with self.data_lock:
+            time_to_fetch = (self.last_fetch_time == 0) or \
+                            ((current_time - self.last_fetch_time) / 60 >= self.update_interval_minutes)
+
+            if (force_fetch or time_to_fetch) and not self.is_fetching:
+                self.is_fetching = True
+                news_fetch_initiated_or_needed = True
+                self._log("INFO", f"Starting background news fetch for {self.widget_id} (URL: {self.rss_url}). Force: {force_fetch}")
+                
+                # Ensure previous thread is not left hanging if any, though unlikely
+                if self.fetch_thread and self.fetch_thread.is_alive():
+                    self._log("WARNING", "Previous fetch thread still alive. This shouldn't normally happen.")
+                
+                self.fetch_thread = threading.Thread(target=self._fetch_news_background)
+                self.fetch_thread.daemon = True
+                self.fetch_thread.start()
+            elif self.is_fetching:
+                self._log("DEBUG", "News fetch already in progress.")
+            
+        return news_fetch_initiated_or_needed
+
 
     def _get_font_name(self):
         if self.font_size == 'small': return '3x5'
@@ -99,8 +175,11 @@ class NewsWidget(BaseWidget):
         return None
 
     def _build_and_measure_scroll_text(self):
-        if not self.headlines_cache: self.current_scroll_text = "No news available."
-        else: self.current_scroll_text = self.HEADLINE_SEPARATOR.join(self.headlines_cache)
+        with self.data_lock: # Protect access to headlines_cache
+            if not self.headlines_cache:
+                self.current_scroll_text = self.INITIAL_LOADING_MESSAGE if self.is_fetching or self.last_fetch_time == 0 else "No news available."
+            else:
+                self.current_scroll_text = self.HEADLINE_SEPARATOR.join(self.headlines_cache)
         
         get_dims = self.global_context.get('get_text_dimensions')
         matrix_w = self.global_context.get('matrix_width', 64)
@@ -127,41 +206,54 @@ class NewsWidget(BaseWidget):
         else: 
             self.text_is_scrollable = False
             self.looping_point_pixels = base_w # Not scrolling, its own width is its boundary
-        self.current_pixel_offset = 0
-        self.time_of_last_pixel_shift = time.monotonic() # Reset timer whenever text/metrics change
 
     def update_scroll_state(self):
-        news_updated = self._fetch_news()
-        if news_updated:
-            self._build_and_measure_scroll_text()
+        # Check if a fetch is needed (e.g. interval passed)
+        # This also handles the case where a fetch completed and headlines_cache might have changed.
+        # We need a way to know if _fetch_news_background resulted in *new* data
+        # to trigger _build_and_measure_scroll_text.
+        # Let's simplify: _trigger_fetch_if_needed starts the fetch.
+        # _build_and_measure_scroll_text will use the latest headlines_cache.
+        # The key is to call _build_and_measure_scroll_text if headlines_cache could have changed.
+        # The background thread updates headlines_cache.
+        # So, if a fetch was running, assume it might have changed, or check a flag.
+        
+        # Store current text to see if it changes after potential fetch and rebuild
+        prev_scroll_text = self.current_scroll_text
+        
+        # Try to fetch new data if interval has passed
+        self._trigger_fetch_if_needed() 
 
-        if not self.current_scroll_text: # Should have been set by init or reconfigure
-             self._build_and_measure_scroll_text()
+        # Always rebuild text, as headlines_cache might have been updated by the background thread.
+        # Or, only rebuild if a fetch was recently completed.
+        # For now, let's always rebuild to ensure consistency after potential background update.
+        # This could be optimized by a flag set by the background thread.
+        self._build_and_measure_scroll_text()
+
+        if prev_scroll_text != self.current_scroll_text:
+            self._log("DEBUG", "News scroll text changed, resetting scroll offset.")
+            self.current_pixel_offset = 0
+            self.time_of_last_pixel_shift = time.monotonic()
+
 
         if self.text_is_scrollable:
             current_time = time.monotonic()
-            # Check if enough time has passed for at least one 1-pixel shift
             if current_time - self.time_of_last_pixel_shift >= self.scroll_interval_seconds:
-                self.current_pixel_offset += 1 # Shift by exactly 1 pixel
-                self.time_of_last_pixel_shift += self.scroll_interval_seconds # Advance the last shift time by one interval
-                
-                # If, due to a long frame, we fell behind, ensure time_of_last_pixel_shift catches up to current_time
-                # to prevent a burst of shifts on the next frame.
+                self.current_pixel_offset += 1 
+                self.time_of_last_pixel_shift += self.scroll_interval_seconds 
                 if self.time_of_last_pixel_shift < current_time - self.scroll_interval_seconds:
                     self.time_of_last_pixel_shift = current_time
-
-                # Looping logic for current_pixel_offset
                 if self.current_pixel_offset >= self.looping_point_pixels:
-                    self.current_pixel_offset = 0 # Simple reset for 1-pixel step
+                    self.current_pixel_offset = 0 
         else:
             self.current_pixel_offset = 0
 
     def get_visible_text_segment(self) -> str:
-        if not self.current_scroll_text or self.current_scroll_text == "No news available." or not self.text_is_scrollable:
-            return self.current_scroll_text # Static display
+        if not self.current_scroll_text or self.current_scroll_text == self.INITIAL_LOADING_MESSAGE or not self.text_is_scrollable:
+            return self.current_scroll_text 
 
         matrix_w = self.global_context.get('matrix_width', 64)
-        if not self.char_widths_cache: # Should be populated by _build_and_measure_scroll_text
+        if not self.char_widths_cache: 
             self._log("ERROR", "Character width cache is empty. Cannot determine visible segment.")
             return "CacheErr"
 
@@ -171,20 +263,16 @@ class NewsWidget(BaseWidget):
         start_char_index_on_tape = 0
         pixel_offset_tracker = 0
 
-        # 1. Find the first character on the tape that should start the visible segment
         for i, char_code in enumerate(tape):
             char = str(char_code)
             char_w = self.char_widths_cache.get(char, 0)
             if pixel_offset_tracker + char_w > self.current_pixel_offset:
                 start_char_index_on_tape = i
-                # The part of this char that is visible is (pixel_offset_tracker + char_w) - self.current_pixel_offset
-                # However, draw_text handles clipping from left, so we just need to provide the string starting here.
                 break
             pixel_offset_tracker += char_w
-        else: # Should not happen if looping_point_pixels is correct and offset is managed
+        else: 
             start_char_index_on_tape = 0 
 
-        # 2. Build the visible segment from this starting character
         for i in range(start_char_index_on_tape, len(tape)):
             char_to_add = tape[i]
             char_w = self.char_widths_cache.get(char_to_add, 0)
@@ -192,13 +280,12 @@ class NewsWidget(BaseWidget):
                 visible_segment += char_to_add
                 current_segment_width += char_w
             else:
-                break # Segment is full
+                break 
         
-        # If, due to large char width vs offset, first char itself is clipped, ensure something is returned if possible
         if not visible_segment and len(tape) > start_char_index_on_tape:
              first_visible_char = tape[start_char_index_on_tape]
-             if self.char_widths_cache.get(first_visible_char, 0) > 0 : # Check if it has a measurable width
-                  return first_visible_char # Return just the first char that should be partially visible
+             if self.char_widths_cache.get(first_visible_char, 0) > 0 : 
+                  return first_visible_char 
 
         return visible_segment
 

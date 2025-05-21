@@ -487,7 +487,9 @@ def set_display_mode_route(mode_name):
 def update_display_content(): 
     global active_widget_instances, current_frame_widget_dimensions
     with data_lock:
+        optimizer.start_timer("matrix_clear")
         matrix_display.clear() 
+        optimizer.end_timer("matrix_clear")
         now = datetime.datetime.now()
         
         new_dimensions_this_frame = []
@@ -500,18 +502,23 @@ def update_display_content():
         widgets_on_current_screen_config = current_screen_config.get('widgets', [])
         current_widget_ids_on_screen = {wc['id'] for wc in widgets_on_current_screen_config if wc.get('enabled')}
 
+        optimizer.start_timer("widget_instance_management")
         ids_to_remove = set(active_widget_instances.keys()) - current_widget_ids_on_screen
         for widget_id in ids_to_remove:
             print(f"Removing instance for widget ID: {widget_id} (no longer on screen or disabled)")
             del active_widget_instances[widget_id]
+        optimizer.end_timer("widget_instance_management")
 
         # Prepare global context using the new helper
+        optimizer.start_timer("prepare_global_context")
         global_widget_context = _prepare_global_widget_context(now, widgets_on_current_screen_config)
+        optimizer.end_timer("prepare_global_context")
 
         if not widgets_on_current_screen_config:
             current_frame_widget_dimensions = new_dimensions_this_frame # Ensure it's updated even if no widgets
             return
 
+        optimizer.start_timer("widget_processing_loop")
         for widget_config in widgets_on_current_screen_config:
             if not widget_config.get('enabled', False):
                 continue
@@ -522,66 +529,66 @@ def update_display_content():
 
             if WidgetClass:
                 instance = None
+                optimizer.start_timer(f"widget_{widget_id}_setup") # New Timer
                 try:
                     if widget_id in active_widget_instances:
-                        # Check if the type matches, just in case config got weird
                         if isinstance(active_widget_instances[widget_id], WidgetClass):
                             instance = active_widget_instances[widget_id]
-                            # Update config and context on existing instance
                             instance.config = widget_config 
                             instance.global_context = global_widget_context
-                            instance.reconfigure() # Re-apply config to internal state
-                            # print(f"Reusing instance for {widget_id}") # Debug
+                            instance.reconfigure() 
                         else:
-                            # Type mismatch, should re-create
                             print(f"Type mismatch for {widget_id}. Expected {WidgetClass.__name__}, found {type(active_widget_instances[widget_id]).__name__}. Recreating.")
                             del active_widget_instances[widget_id] # remove bad instance
                     
-                    if instance is None: # Needs creation or re-creation
+                    if instance is None: 
                         instance = WidgetClass(config=widget_config, global_context=global_widget_context)
                         active_widget_instances[widget_id] = instance
                         print(f"Created new instance for widget ID: {widget_id} of type {widget_type}")
+                finally:
+                    optimizer.end_timer(f"widget_{widget_id}_setup") # New Timer
                     
-                    # --- Determine text content and drawing parameters ---
-                    # For NewsWidget, get_content() now handles updating scroll state 
-                    # and returning the correctly clipped visible segment.
-                    # The pixel offset is managed internally by the widget.
-                    text_to_draw = instance.get_content()
-                    final_draw_x = instance.x # Draw the returned segment at the widget's base x
+                if instance: # Ensure instance was successfully created/retrieved
+                    try:
+                        optimizer.start_timer(f"widget_{widget_id}_get_content")
+                        text_to_draw = instance.get_content()
+                        optimizer.end_timer(f"widget_{widget_id}_get_content")
 
-                    if text_to_draw: 
-                        rgb_color_tuple = hex_to_rgb(instance.color)
-                        font_name_to_pass = None
-                        if hasattr(instance, 'font_size'):
-                            if instance.font_size == 'small': font_name_to_pass = '3x5'
-                            elif instance.font_size == 'medium': font_name_to_pass = '5x7'
-                            elif instance.font_size == 'large': font_name_to_pass = '7x9'
-                            elif instance.font_size == 'xl': font_name_to_pass = 'xl' # Uses 9x13 in display.py
-                        
-                        # Calculate and store dimensions
-                        try:
-                            width_cells, height_cells = matrix_display.get_text_dimensions(text_to_draw, font_name_to_pass)
-                            new_dimensions_this_frame.append({
-                                'id': widget_id,
-                                'width_cells': width_cells,
-                                'height_cells': height_cells
-                            })
-                        except Exception as dim_error:
-                            print(f"Error calculating dimensions for widget {widget_id}: {dim_error}")
-                            # Add with default/fallback dimensions if calculation fails
-                            new_dimensions_this_frame.append({
-                                'id': widget_id,
-                                'width_cells': 5, # Fallback width
-                                'height_cells': 7  # Fallback height (e.g. for 5x7 font)
-                            })
+                        final_draw_x = instance.x 
 
-                        matrix_display.draw_text(text_to_draw, final_draw_x, instance.y, color_tuple=rgb_color_tuple, font_name=font_name_to_pass)
-                except Exception as e:
-                    print(f"Error processing widget '{widget_config.get('id', widget_type)}': {e}")
+                        if text_to_draw: 
+                            rgb_color_tuple = hex_to_rgb(instance.color)
+                            font_name_to_pass = None
+                            if hasattr(instance, 'font_size'):
+                                if instance.font_size == 'small': font_name_to_pass = '3x5'
+                                elif instance.font_size == 'medium': font_name_to_pass = '5x7'
+                                elif instance.font_size == 'large': font_name_to_pass = '7x9'
+                                elif instance.font_size == 'xl': font_name_to_pass = 'xl' 
+                            
+                            try:
+                                width_cells, height_cells = matrix_display.get_text_dimensions(text_to_draw, font_name_to_pass)
+                                new_dimensions_this_frame.append({
+                                    'id': widget_id,
+                                    'width_cells': width_cells,
+                                    'height_cells': height_cells
+                                })
+                            except Exception as dim_error:
+                                print(f"Error calculating dimensions for widget {widget_id}: {dim_error}")
+                                new_dimensions_this_frame.append({
+                                    'id': widget_id,
+                                    'width_cells': 5, 
+                                    'height_cells': 7  
+                                })
+                            
+                            optimizer.start_timer(f"widget_{widget_id}_draw_text")
+                            matrix_display.draw_text(text_to_draw, final_draw_x, instance.y, color_tuple=rgb_color_tuple, font_name=font_name_to_pass)
+                            optimizer.end_timer(f"widget_{widget_id}_draw_text")
+                    except Exception as e:
+                        print(f"Error processing widget '{widget_config.get('id', widget_type)}': {e}")
             else:
                 print(f"Warning: Widget type '{widget_type}' not found in AVAILABLE_WIDGETS.")
+        optimizer.end_timer("widget_processing_loop")
         
-        # Update the global dimensions list for the current frame
         current_frame_widget_dimensions = new_dimensions_this_frame
 
 @app.route('/api/matrix_data')
@@ -637,6 +644,8 @@ def periodic_display_updater():
     frame_count = 0
     skip_count = 0
     last_stats_time = time.monotonic()
+    log_save_counter = 0 # New counter for saving logs
+    LOG_SAVE_INTERVAL = 6 # Save log every 6*10 = 60 seconds
     
     while True:
         loop_start_time = time.monotonic()
@@ -647,6 +656,7 @@ def periodic_display_updater():
         # Decide if we should skip this frame based on performance
         should_skip = optimizer.should_skip_frame()
         
+        optimizer.start_timer("pdu_auto_screen_rotation") # New Timer Start
         # Auto Screen Rotation - Check if it's time to change screens
         current_time = time.monotonic()
         
@@ -680,6 +690,7 @@ def periodic_display_updater():
                     print(f"[AUTO_ROTATE_DEBUG] Auto-rotation enabled but need at least 2 screens. "
                           f"Currently have {len(screen_layouts)} screens available.")
                     last_debug_log_time = current_time
+        optimizer.end_timer("pdu_auto_screen_rotation") # New Timer End
         
         # Track frame stats
         frame_count += 1
@@ -719,6 +730,7 @@ def periodic_display_updater():
             # Record loop finish time
             last_loop_finish_time = time.monotonic()
             
+            optimizer.start_timer("pdu_periodic_stats_log") # New Timer Start
             # Log performance stats periodically
             if time.monotonic() - last_stats_time > 10:  # Every 10 seconds
                 total_time = time.monotonic() - last_stats_time
@@ -736,8 +748,13 @@ def periodic_display_updater():
                 skip_count = 0
                 last_stats_time = time.monotonic()
                 
-                # Save performance log
-                optimizer.save_log()
+                log_save_counter += 1
+                if log_save_counter >= LOG_SAVE_INTERVAL:
+                    optimizer.save_log()
+                    log_save_counter = 0 # Reset counter
+                    print("[PERF_STATS] Performance log saved.")
+
+            optimizer.end_timer("pdu_periodic_stats_log") # New Timer End
                 
         except Exception as e:
             print(f"Error in periodic_display_updater: {e}")

@@ -3,6 +3,7 @@ import requests
 from .base_widget import BaseWidget
 import time # Added for caching
 import re # For parsing display_format
+import threading # Added for background fetching
 
 # WMO Weather interpretation codes (simplified)
 # Source: Open-Meteo documentation
@@ -51,22 +52,26 @@ class WeatherWidget(BaseWidget):
         self.update_interval_minutes = self.config.get('update_interval_minutes', self.DEFAULT_UPDATE_INTERVAL_MINUTES)
         self.last_weather_data = None
         self.last_fetch_time = 0 # Use 0 to ensure first fetch always happens
+        self.is_fetching = False # Flag to indicate if a fetch is in progress
+        self.fetch_thread = None # Holds the reference to the fetch thread
+        self.data_lock = threading.Lock() # Lock for accessing shared data like last_weather_data
         # Ensure super().__init__ is called if not already, for enable_logging
         # It's called at the top of __init__ in this class, so self.enable_logging and self._log are available
 
     def reconfigure(self):
         super().reconfigure() # Call base class reconfigure
         # Re-apply WeatherWidget specific configurations
-        self.location_name = self.config.get('location_name', 'Billingham,UK')
-        self.units = self.config.get('units', 'metric')
-        self.latitude = self.config.get('latitude', self.DEFAULT_LATITUDE)
-        self.longitude = self.config.get('longitude', self.DEFAULT_LONGITUDE)
-        self.time_display_format = self.config.get('time_display_format', '%H:%M')
-        self.display_format = self.config.get('display_format', 'Temp: {temp}{unit_symbol}')
-        self.font_size = self.config.get('font_size', "medium")
-        self.update_interval_minutes = self.config.get('update_interval_minutes', self.DEFAULT_UPDATE_INTERVAL_MINUTES)
-        # Note: Cache attributes (self.last_weather_data, self.last_fetch_time) are not reset here
-        # as the underlying data might still be valid. get_content() handles cache logic.
+        with self.data_lock: # Ensure thread safety when reconfiguring
+            self.location_name = self.config.get('location_name', 'Billingham,UK')
+            self.units = self.config.get('units', 'metric')
+            self.latitude = self.config.get('latitude', self.DEFAULT_LATITUDE)
+            self.longitude = self.config.get('longitude', self.DEFAULT_LONGITUDE)
+            self.time_display_format = self.config.get('time_display_format', '%H:%M')
+            self.display_format = self.config.get('display_format', 'Temp: {temp}{unit_symbol}')
+            self.font_size = self.config.get('font_size', "medium")
+            self.update_interval_minutes = self.config.get('update_interval_minutes', self.DEFAULT_UPDATE_INTERVAL_MINUTES)
+            # Don't reset cache on reconfigure, let get_content handle it.
+            # If location or units change, next fetch will get new data.
 
     def _parse_weather_data(self, weather_data_json: dict) -> dict:
         """Helper to parse the JSON response from Open-Meteo into a flat dictionary."""
@@ -153,55 +158,16 @@ class WeatherWidget(BaseWidget):
         
         return available_data
 
-    def get_content(self) -> str:
-        """Fetches weather data (or uses cache) and formats it."""
-        current_monotonic_time = time.monotonic()
-        
-        # Update config dynamically in case it changed
-        self.units = self.config.get('units', 'metric')
-        self.latitude = self.config.get('latitude', self.DEFAULT_LATITUDE)
-        self.longitude = self.config.get('longitude', self.DEFAULT_LONGITUDE)
-        self.time_display_format = self.config.get('time_display_format', '%H:%M')
-        self.display_format = self.config.get('display_format', 'Temp: {temp}{unit_symbol}')
-        self.update_interval_minutes = self.config.get('update_interval_minutes', self.DEFAULT_UPDATE_INTERVAL_MINUTES)
-
-        # Check cache
-        # Ensure update_interval_minutes is positive to avoid division by zero or always fetching
-        effective_interval_seconds = self.update_interval_minutes * 60 if self.update_interval_minutes > 0 else 0
-        
-        if self.last_weather_data and effective_interval_seconds > 0 and \
-           (current_monotonic_time - self.last_fetch_time) < effective_interval_seconds:
-            # print(f"[WeatherWidget-{self.widget_id}] INFO: Using cached weather data.")
-            # Comment out or reduce log frequency to decrease noise
-            # self._log("INFO", "Using cached weather data.")
-            parsed_data = self._parse_weather_data(self.last_weather_data)
-            try: return self.display_format.format_map(parsed_data)
-            except KeyError as e: 
-                # print(f"[WeatherWidget-{self.widget_id}] WARNING: Invalid key '{e}' in display_format (cached). Available: {list(parsed_data.keys())}")
-                self._log("WARNING", f"Invalid key '{e}' in display_format (cached). Available: {list(parsed_data.keys())}")
-                return "Format Err"
-            except Exception as e: 
-                # print(f"[WeatherWidget-{self.widget_id}] ERROR: Formatting cached data: {e}")
-                self._log("ERROR", f"Formatting cached data: {e}")
-                return "Cache Fmt Err"
-
-        # Fetch new data
+    def _fetch_data_background(self):
+        """Fetches weather data in a background thread."""
         temp_unit_param = 'celsius' if self.units == 'metric' else 'fahrenheit'
         wind_speed_unit_param = 'kmh' if self.units == 'metric' else 'mph'
-
-        # Determine max forecast days needed from display_format string
         max_days_needed = 0
         if self.display_format:
-            # Find all instances of _N where N is a digit for relevant forecast fields
             matches = re.findall(r'\{(?:temp_max|temp_min|weather_desc|dow)_(\d+)\}', self.display_format)
             if matches:
                 max_days_needed = max(int(m) for m in matches)
-
-        # API forecast_days is 1-indexed for number of days including today.
-        # So if user wants _0 (today), we need forecast_days=1.
-        # If user wants _1 (tomorrow), we need forecast_days=2.
         api_forecast_days = max_days_needed + 1
-
         params = {
             'latitude': self.latitude,
             'longitude': self.longitude,
@@ -210,41 +176,76 @@ class WeatherWidget(BaseWidget):
             'temperature_unit': temp_unit_param,
             'windspeed_unit': wind_speed_unit_param,
             'timezone': 'auto',
-            'forecast_days': api_forecast_days # Use dynamically determined forecast days
+            'forecast_days': api_forecast_days
         }
 
+        new_data = None
+        fetch_error = None
         try:
-            # print(f"[WeatherWidget-{self.widget_id}] INFO: Fetching weather for lat={self.latitude}, lon={self.longitude} (Location: '{self.location_name}')") # Params removed for brevity
-            # Only log when actually fetching new data (less frequent than cache checks)
-            self._log("INFO", f"Fetching weather for lat={self.latitude}, lon={self.longitude} (Location: '{self.location_name}')")
+            self._log("INFO", f"Background fetching weather for lat={self.latitude}, lon={self.longitude}")
             response = requests.get(self.API_BASE_URL, params=params, timeout=10)
             response.raise_for_status()
-            
-            self.last_weather_data = response.json() # Cache the raw JSON
-            self.last_fetch_time = current_monotonic_time
-            # print(f"[WeatherWidget-{self.widget_id}] DEBUG: API Response: {self.last_weather_data}") # For debugging
-            # Comment out detailed debug logs unless needed for troubleshooting
-            # self._log("DEBUG", f"API Response: {self.last_weather_data}")
-            
-            parsed_data = self._parse_weather_data(self.last_weather_data)
-            try: return self.display_format.format_map(parsed_data)
-            except KeyError as e: 
-                # print(f"[WeatherWidget-{self.widget_id}] WARNING: Invalid key '{e}' in display_format. Available: {list(parsed_data.keys())}")
-                self._log("WARNING", f"Invalid key '{e}' in display_format. Available: {list(parsed_data.keys())}")
-                return "Format Err"
+            new_data = response.json()
+        except requests.exceptions.HTTPError as e:
+            fetch_error = f"HTTP Error: {e} - Resp: {e.response.text if e.response else 'No response'}"
+        except requests.exceptions.RequestException as e:
+            fetch_error = f"RequestException: {e}"
+        except Exception as e:
+            fetch_error = f"Unexpected error during fetch: {e}"
+        finally:
+            with self.data_lock:
+                if new_data:
+                    self.last_weather_data = new_data
+                    self.last_fetch_time = time.monotonic()
+                    self._log("INFO", "Background fetch successful, cache updated.")
+                elif fetch_error:
+                    self._log("ERROR", fetch_error)
+                self.is_fetching = False # Reset fetching flag
 
-        except requests.exceptions.HTTPError as e: 
-            # print(f"[WeatherWidget-{self.widget_id}] ERROR: HTTP Error: {e} - Resp: {e.response.text if e.response else 'No response'}")
-            self._log("ERROR", f"HTTP Error: {e} - Resp: {e.response.text if e.response else 'No response'}")
-            return "Weather: HTTP Err"
-        except requests.exceptions.RequestException as e: 
-            # print(f"[WeatherWidget-{self.widget_id}] ERROR: RequestException: {e}")
-            self._log("ERROR", f"RequestException: {e}")
-            return "Weather: Net Err"
-        except Exception as e: 
-            # print(f"[WeatherWidget-{self.widget_id}] ERROR: Unexpected error: {e}")
-            self._log("ERROR", f"Unexpected error: {e}")
-            return "Weather: Data Err"
+    def get_content(self) -> str:
+        """Fetches weather data (or uses cache) and formats it."""
+        current_monotonic_time = time.monotonic()
+        
+        # Critical config items read directly, assume reconfigure handles updates if necessary
+        # These are used to decide IF we need to fetch, not necessarily for the fetch itself,
+        # which is now in background and will use the instance's current lat/lon/units.
+        update_interval_min = self.config.get('update_interval_minutes', self.DEFAULT_UPDATE_INTERVAL_MINUTES)
+        current_display_format = self.config.get('display_format', 'Temp: {temp}{unit_symbol}')
+
+        effective_interval_seconds = update_interval_min * 60 if update_interval_min > 0 else 0
+        
+        needs_fetch = False
+        with self.data_lock: # Protect access to last_fetch_time and is_fetching
+            if self.last_fetch_time == 0: # First ever call or data explicitly cleared
+                 needs_fetch = True
+            elif effective_interval_seconds > 0 and \
+                 (current_monotonic_time - self.last_fetch_time) >= effective_interval_seconds:
+                 needs_fetch = True
+            
+            if needs_fetch and not self.is_fetching:
+                self.is_fetching = True
+                self._log("INFO", f"Cache stale or missing. Starting background fetch for {self.widget_id}.")
+                # Use current instance attributes for the fetch
+                self.fetch_thread = threading.Thread(target=self._fetch_data_background)
+                self.fetch_thread.daemon = True 
+                self.fetch_thread.start()
+
+        # Always try to return content, even if stale or fetching
+        with self.data_lock: # Protect access to self.last_weather_data
+            if self.last_weather_data:
+                parsed_data = self._parse_weather_data(self.last_weather_data) # Uses instance units/time_format
+                try:
+                    return current_display_format.format_map(parsed_data)
+                except KeyError as e: 
+                    self._log("WARNING", f"Invalid key '{e}' in display_format. Available: {list(parsed_data.keys())}")
+                    return "Format Err"
+                except Exception as e: 
+                    self._log("ERROR", f"Formatting data: {e}")
+                    return "Render Err"
+            elif self.is_fetching:
+                return "Updating..." 
+            else: # No data and not fetching (e.g. first load failed and interval not passed)
+                return "No Data"
 
     @staticmethod
     def get_config_options() -> list:
