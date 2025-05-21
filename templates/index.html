@@ -334,9 +334,9 @@
 
         async function onMouseUp(event) {
             if (!draggedWidgetElement) return;
+            
+            // First reset cursor and hide guides immediately
             draggedWidgetElement.style.cursor = 'grab';
-
-            // Hide centering guides on drag end
             if (horizontalCenterGuide) horizontalCenterGuide.style.display = 'none';
             if (verticalCenterGuide) verticalCenterGuide.style.display = 'none';
 
@@ -358,6 +358,13 @@
             draggedWidgetElement.style.left = (gridX * CELL_SIZE) + 'px';
             draggedWidgetElement.style.top = (gridY * CELL_SIZE) + 'px';
 
+            // Store the current widget element before setting the global to null
+            const releasedWidgetElement = draggedWidgetElement;
+            
+            // Remove the event listener and reset the global variable BEFORE the async operation
+            document.removeEventListener('mousemove', onMouseMove);
+            draggedWidgetElement = null;
+
             // Update the layout object
             if (currentScreenLayouts && currentScreenLayouts[jsCurrentDisplayMode] && currentScreenLayouts[jsCurrentDisplayMode].widgets) {
                 const widgetToUpdate = currentScreenLayouts[jsCurrentDisplayMode].widgets.find(w => w.id === widgetId);
@@ -365,13 +372,12 @@
                     widgetToUpdate.x = gridX;
                     widgetToUpdate.y = gridY;
                     console.log(`Widget ${widgetId} new position: X=${gridX}, Y=${gridY}`);
-                    await saveUpdatedLayouts(); // Save and refresh
+                    saveUpdatedLayouts(); // Save and refresh
                 }
             }
             
-            document.removeEventListener('mousemove', onMouseMove);
             // mouseup listener is already removed due to { once: true }
-            draggedWidgetElement = null;
+            // draggedWidgetElement = null; - MOVED EARLIER to prevent race condition
         }
 
         async function saveUpdatedLayouts() {
@@ -425,9 +431,21 @@
         async function setDisplayMode(mode, isAutoRotation = false) {
             try {
                 // If rotation is active and this is a manual change, stop rotation.
-                if (rotationTimeoutId && !isAutoRotation) {
-                    stopScreenRotation();
+                if (enableScreenRotationCheckbox.checked && !isAutoRotation) {
+                    // Inform server to stop auto rotation
+                    try {
+                        await fetch('/api/set_auto_rotation_status', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ enabled: false })
+                        });
+                    } catch (error) {
+                        console.error('Error disabling auto rotation:', error);
+                    }
                     enableScreenRotationCheckbox.checked = false;
+                    manageRotationControls(false);
                 }
 
                 const response = await fetch(`/api/set_display_mode/${mode}`, { method: 'POST' });
@@ -446,10 +464,22 @@
         }
 
         if (menuButtons.previous) {
-            menuButtons.previous.addEventListener('click', () => {
+            menuButtons.previous.addEventListener('click', async () => {
                 if (enableScreenRotationCheckbox.checked) { // Stop rotation on manual navigation
-                    stopScreenRotation();
+                    // Inform server to stop auto rotation
+                    try {
+                        await fetch('/api/set_auto_rotation_status', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ enabled: false })
+                        });
+                    } catch (error) {
+                        console.error('Error disabling auto rotation:', error);
+                    }
                     enableScreenRotationCheckbox.checked = false;
+                    manageRotationControls(false);
                 }
                 const screenIds = Object.keys(currentScreenLayouts).sort();
                 if (screenIds.length === 0) return;
@@ -461,10 +491,22 @@
         }
 
         if (menuButtons.next) {
-            menuButtons.next.addEventListener('click', () => {
+            menuButtons.next.addEventListener('click', async () => {
                 if (enableScreenRotationCheckbox.checked) { // Stop rotation on manual navigation
-                    stopScreenRotation();
+                    // Inform server to stop auto rotation
+                    try {
+                        await fetch('/api/set_auto_rotation_status', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ enabled: false })
+                        });
+                    } catch (error) {
+                        console.error('Error disabling auto rotation:', error);
+                    }
                     enableScreenRotationCheckbox.checked = false;
+                    manageRotationControls(false);
                 }
                 const screenIds = Object.keys(currentScreenLayouts).sort();
                 if (screenIds.length === 0) return;
@@ -603,13 +645,60 @@
         }
 
         if (enableScreenRotationCheckbox) {
-            enableScreenRotationCheckbox.addEventListener('change', () => {
-                if (enableScreenRotationCheckbox.checked) {
-                    startScreenRotation();
-                } else {
-                    stopScreenRotation();
+            enableScreenRotationCheckbox.addEventListener('change', async () => {
+                try {
+                    const response = await fetch('/api/set_auto_rotation_status', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ enabled: enableScreenRotationCheckbox.checked })
+                    });
+                    
+                    if (!response.ok) {
+                        console.error('Failed to set auto rotation status:', response.status);
+                        // Revert checkbox state if server update failed
+                        enableScreenRotationCheckbox.checked = !enableScreenRotationCheckbox.checked;
+                        return;
+                    }
+                    
+                    const data = await response.json();
+                    console.log(`Auto rotation ${data.enabled ? 'enabled' : 'disabled'}`);
+                    
+                    if (data.enabled) {
+                        // Server-side rotation is now enabled
+                        manageRotationControls(true);
+                    } else {
+                        // Server-side rotation is now disabled
+                        manageRotationControls(false);
+                    }
+                } catch (error) {
+                    console.error('Error setting auto rotation status:', error);
+                    // Revert checkbox state if request failed
+                    enableScreenRotationCheckbox.checked = !enableScreenRotationCheckbox.checked;
                 }
             });
+            
+            // Initialize checkbox state from server on page load
+            fetchAutoRotationStatus();
+        }
+        
+        // Add function to fetch current auto rotation status
+        async function fetchAutoRotationStatus() {
+            try {
+                const response = await fetch('/api/get_auto_rotation_status');
+                if (response.ok) {
+                    const data = await response.json();
+                    enableScreenRotationCheckbox.checked = data.enabled;
+                    if (data.enabled) {
+                        manageRotationControls(true);
+                    } else {
+                        manageRotationControls(false);
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching auto rotation status:', error);
+            }
         }
 
         // Initial setup
@@ -627,6 +716,7 @@
             updateEditModeButtonState(); // Set initial button text/style and overlay visibility
 
             await fetchAndUpdateMatrix(); 
+            await fetchAutoRotationStatus(); // Get initial auto rotation status
             updateMenuButtons(jsCurrentDisplayMode); 
             setInterval(async () => {
                 await fetchAndUpdateMatrix(); 

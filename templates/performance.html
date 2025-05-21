@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Performance Monitoring</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .flex-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .half-width {
+            flex: 1 1 calc(50% - 20px);
+            min-width: 300px;
+        }
+        .system-stat {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .stat-label {
+            font-weight: bold;
+        }
+        .stat-value {
+            text-align: right;
+        }
+        h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .perf-stat {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .perf-stat-name {
+            font-weight: bold;
+        }
+        .warning {
+            color: #ff5722;
+        }
+        .good {
+            color: #4caf50;
+        }
+        .navbar {
+            background-color: #333;
+            overflow: hidden;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .navbar a {
+            float: left;
+            display: block;
+            color: white;
+            text-align: center;
+            padding: 14px 16px;
+            text-decoration: none;
+        }
+        .navbar a:hover {
+            background-color: #ddd;
+            color: black;
+        }
+        .navbar a.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .refresh-btn {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .save-btn {
+            background-color: #2196F3;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .card-actions {
+            text-align: right;
+            margin-top: 15px;
+        }
+        .chart-container {
+            width: 100%;
+            height: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="navbar">
+            <a href="/">Home</a>
+            <a href="/config">Configuration</a>
+            <a href="/performance" class="active">Performance</a>
+        </div>
+        
+        <div class="header">
+            <h1>Performance Monitoring & Optimization</h1>
+        </div>
+        
+        <div class="flex-container">
+            <div class="half-width">
+                <div class="card">
+                    <h2>System Statistics</h2>
+                    <div id="system-stats">
+                        <div class="system-stat">
+                            <div class="stat-label">CPU Usage</div>
+                            <div class="stat-value" id="cpu-usage">Loading...</div>
+                        </div>
+                        <div class="system-stat">
+                            <div class="stat-label">Memory Usage</div>
+                            <div class="stat-value" id="memory-usage">Loading...</div>
+                        </div>
+                        <div class="system-stat">
+                            <div class="stat-label">CPU Temperature</div>
+                            <div class="stat-value" id="cpu-temp">Loading...</div>
+                        </div>
+                        <div class="system-stat">
+                            <div class="stat-label">CPU Frequency</div>
+                            <div class="stat-value" id="cpu-freq">Loading...</div>
+                        </div>
+                        <div class="system-stat">
+                            <div class="stat-label">FPS (Frames Per Second)</div>
+                            <div class="stat-value" id="fps">Loading...</div>
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="refresh-btn" onclick="refreshSystemStats()">Refresh Stats</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="half-width">
+                <div class="card">
+                    <h2>Performance Settings</h2>
+                    <div id="performance-settings">
+                        <div class="setting-row">
+                            <div>Reduce Update Frequency</div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="reduce-frequency">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-row">
+                            <div>Disable Animations</div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="disable-animations">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-row">
+                            <div>Skip Frames When Slow</div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="skip-frame-rendering">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-row">
+                            <div>Minimize Logging</div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="minimize-logging">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-row">
+                            <div>Log Settings Update Messages</div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="log-settings-updates">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-row">
+                            <div>Update Interval Multiplier</div>
+                            <input type="range" id="update-interval-multiplier" min="1" max="5" step="0.5" value="2">
+                            <span id="multiplier-value">2.0</span>
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="save-btn" onclick="saveSettings()">Save Settings</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Performance Metrics</h2>
+            <div id="performance-metrics">
+                <div class="perf-stat">Loading performance data...</div>
+            </div>
+            <div class="card-actions">
+                <button class="refresh-btn" onclick="refreshPerformanceMetrics()">Refresh Metrics</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Initial data load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSettings();
+            refreshSystemStats();
+            refreshPerformanceMetrics();
+            
+            // Set up interval updates
+            setInterval(refreshSystemStats, 5000); // Every 5 seconds
+            setInterval(refreshPerformanceMetrics, 10000); // Every 10 seconds
+            
+            // Set up slider value display
+            document.getElementById('update-interval-multiplier').addEventListener('input', function() {
+                document.getElementById('multiplier-value').textContent = this.value;
+            });
+        });
+        
+        // Load current settings
+        function loadSettings() {
+            fetch('/api/performance_settings', {
+                method: 'GET'
+            })
+            .then(response => response.json())
+            .then(data => {
+                const settings = data.settings || {};
+                document.getElementById('reduce-frequency').checked = settings.reduce_update_frequency || false;
+                document.getElementById('disable-animations').checked = settings.disable_animations || false;
+                document.getElementById('skip-frame-rendering').checked = settings.skip_frame_rendering || false;
+                document.getElementById('minimize-logging').checked = settings.minimize_logging || false;
+                document.getElementById('log-settings-updates').checked = settings.log_settings_updates || false;
+                
+                const multiplier = settings.update_interval_multiplier || 2.0;
+                document.getElementById('update-interval-multiplier').value = multiplier;
+                document.getElementById('multiplier-value').textContent = multiplier;
+            })
+            .catch(error => {
+                console.error('Error loading settings:', error);
+            });
+        }
+        
+        // Save settings
+        function saveSettings() {
+            const settings = {
+                reduce_update_frequency: document.getElementById('reduce-frequency').checked,
+                disable_animations: document.getElementById('disable-animations').checked,
+                skip_frame_rendering: document.getElementById('skip-frame-rendering').checked,
+                minimize_logging: document.getElementById('minimize-logging').checked,
+                log_settings_updates: document.getElementById('log-settings-updates').checked,
+                update_interval_multiplier: parseFloat(document.getElementById('update-interval-multiplier').value)
+            };
+            
+            fetch('/api/performance_settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(settings),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Settings saved successfully!');
+                } else {
+                    alert('Error saving settings: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error saving settings:', error);
+                alert('Error saving settings. See console for details.');
+            });
+        }
+        
+        // Refresh system stats
+        function refreshSystemStats() {
+            fetch('/api/system_stats')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('cpu-usage').textContent = data.cpu_percent + '%';
+                document.getElementById('memory-usage').textContent = data.memory_percent + '%';
+                document.getElementById('cpu-temp').textContent = data.temperature;
+                document.getElementById('cpu-freq').textContent = data.cpu_frequency;
+                
+                // FPS would come from performance metrics
+                fetch('/api/performance_stats')
+                .then(response => response.json())
+                .then(perfData => {
+                    const fpsData = perfData.sections?.display_update_cycle || {};
+                    const avgCycleTime = fpsData.avg_ms || 0;
+                    const fps = avgCycleTime > 0 ? (1000 / avgCycleTime).toFixed(1) : 'N/A';
+                    document.getElementById('fps').textContent = fps + ' FPS';
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching system stats:', error);
+            });
+        }
+        
+        // Refresh performance metrics
+        function refreshPerformanceMetrics() {
+            fetch('/api/performance_stats')
+            .then(response => response.json())
+            .then(data => {
+                if (data.message) {
+                    document.getElementById('performance-metrics').innerHTML = 
+                        `<div class="perf-stat">${data.message}</div>`;
+                    return;
+                }
+                
+                let metricsHtml = '';
+                
+                // Overall stats
+                metricsHtml += `
+                    <div class="perf-stat">
+                        <div class="perf-stat-name">Total Performance Entries</div>
+                        <div>${data.total_entries || 0}</div>
+                    </div>
+                    <div class="perf-stat">
+                        <div class="perf-stat-name">Performance Threshold Exceeded</div>
+                        <div class="${data.exceeded_percent > 10 ? 'warning' : 'good'}">
+                            ${data.exceeded_threshold_count || 0} times 
+                            (${(data.exceeded_percent || 0).toFixed(1)}%)
+                        </div>
+                    </div>
+                `;
+                
+                // Section stats
+                const sections = data.sections || {};
+                for (const [sectionName, sectionData] of Object.entries(sections)) {
+                    metricsHtml += `
+                        <div class="perf-stat">
+                            <div class="perf-stat-name">${sectionName}</div>
+                            <div>
+                                Average: <span class="${sectionData.avg_ms > 50 ? 'warning' : 'good'}">${sectionData.avg_ms.toFixed(2)}ms</span><br>
+                                Max: ${sectionData.max_ms.toFixed(2)}ms<br>
+                                Exceeded: ${sectionData.exceeded_count} of ${sectionData.count} 
+                                (${sectionData.exceed_percent.toFixed(1)}%)
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                document.getElementById('performance-metrics').innerHTML = metricsHtml;
+            })
+            .catch(error => {
+                console.error('Error fetching performance metrics:', error);
+            });
+        }
+    </script>
+</body>
+</html> 

@@ -11,6 +11,10 @@ import time
 import threading # For background updates
 import logging # Added for custom log filter
 
+# Import performance optimization modules
+from performance_optimizer import optimizer
+from performance_utils import RaspberryPiOptimizer, optimize_flask_app, get_app_optimizations
+
 # Import BaseWidget to check instance types, though specific widgets are loaded dynamically
 from widgets.base_widget import BaseWidget 
 
@@ -27,6 +31,11 @@ matrix_display = Display(width=MATRIX_WIDTH, height=MATRIX_HEIGHT)
 current_display_mode = 'default' 
 SCREEN_LAYOUTS_FILE_PATH = 'screen_layouts.json'
 
+# Add these global variables near the top of the file with other globals
+AUTO_SCREEN_ROTATION_ENABLED = False
+last_screen_change_time = time.monotonic()
+last_debug_log_time = time.monotonic()
+
 # --- Widget Management ---
 AVAILABLE_WIDGETS = {} # Stores loaded widget classes, e.g., {"time": TimeWidget, "text": TextWidget}
 active_widget_instances = {} # Stores active widget instances: widget_id -> instance
@@ -34,7 +43,14 @@ active_widget_instances = {} # Stores active widget instances: widget_id -> inst
 # Lock for synchronizing access to shared resources like screen_layouts, current_display_mode, and matrix_display
 data_lock = threading.Lock()
 
-DISPLAY_UPDATE_INTERVAL = 0.05 # seconds - Increased for smoother animation (was 1.0)
+# Initialize Raspberry Pi optimizer
+pi_optimizer = RaspberryPiOptimizer()
+
+# Performance settings
+app_optimizations = get_app_optimizations()
+DISPLAY_UPDATE_INTERVAL = 0.1 if app_optimizations["reduce_update_frequency"] else 0.05  # seconds
+SKIP_FRAMES_ON_SLOW = True  # Skip frames if processing is too slow
+SKIP_FRAME_THRESHOLD = app_optimizations["skip_frame_threshold"]  # ms
 MATRIX_DATA_LOGGING_ENABLED = True # Global flag for matrix_data route logging
 current_frame_widget_dimensions = [] # Stores dimensions of widgets in the current frame
 
@@ -345,6 +361,11 @@ def index():
 def config_page():
     return render_template('config.html')
 
+@app.route('/performance')
+def performance_page():
+    """Route for the performance monitoring page"""
+    return render_template('performance.html')
+
 @app.route('/api/get_widget_types', methods=['GET'])
 def get_widget_types_route():
     """Returns a list of available widget types and their configurations."""
@@ -610,33 +631,190 @@ def set_matrix_logging_status():
 def periodic_display_updater():
     """Periodically calls update_display_content in a background thread."""
     print("Starting periodic display updater thread...")
+    global current_display_mode, last_screen_change_time, last_debug_log_time
+    
     last_loop_finish_time = time.monotonic()
+    frame_count = 0
+    skip_count = 0
+    last_stats_time = time.monotonic()
+    
     while True:
         loop_start_time = time.monotonic()
-        # Precise timing log
-        now_for_log = datetime.datetime.now()
+        
+        # Adaptive update interval based on performance
+        current_interval = optimizer.get_update_interval(DISPLAY_UPDATE_INTERVAL)
+        
+        # Decide if we should skip this frame based on performance
+        should_skip = optimizer.should_skip_frame()
+        
+        # Auto Screen Rotation - Check if it's time to change screens
+        current_time = time.monotonic()
+        
+        with data_lock:
+            if AUTO_SCREEN_ROTATION_ENABLED and len(screen_layouts) > 1:
+                current_screen = screen_layouts.get(current_display_mode)
+                display_time = current_screen.get('display_time_seconds', DEFAULT_SCREEN_DISPLAY_TIME_S) if current_screen else DEFAULT_SCREEN_DISPLAY_TIME_S
+                
+                # Debug print to track time - only print once every 30 seconds to reduce noise
+                elapsed_time = current_time - last_screen_change_time
+                if current_time - last_debug_log_time > 30:  # Limit to every 30 seconds
+                    print(f"[AUTO_ROTATE_DEBUG] Enabled: {AUTO_SCREEN_ROTATION_ENABLED}, Current: '{current_display_mode}', "
+                          f"Time elapsed: {elapsed_time:.1f}s, Display time: {display_time}s, "
+                          f"Available screens: {list(screen_layouts.keys())}")
+                    last_debug_log_time = current_time
+                
+                if current_time - last_screen_change_time >= display_time:
+                    # Get the list of screen IDs
+                    screen_ids = list(screen_layouts.keys())
+                    current_index = screen_ids.index(current_display_mode) if current_display_mode in screen_ids else 0
+                    next_index = (current_index + 1) % len(screen_ids)
+                    next_screen_id = screen_ids[next_index]
+                    
+                    # Change to the next screen
+                    current_display_mode = next_screen_id
+                    last_screen_change_time = current_time
+                    print(f"[AUTO_ROTATE] Changing screen to '{next_screen_id}' (from '{screen_ids[current_index]}')")
+            elif AUTO_SCREEN_ROTATION_ENABLED:
+                # Only log this message once per minute to reduce noise
+                if current_time - last_debug_log_time > 60:
+                    print(f"[AUTO_ROTATE_DEBUG] Auto-rotation enabled but need at least 2 screens. "
+                          f"Currently have {len(screen_layouts)} screens available.")
+                    last_debug_log_time = current_time
+        
+        # Track frame stats
+        frame_count += 1
         actual_cycle_time_ms = (loop_start_time - last_loop_finish_time) * 1000
-        # print(f"[{now_for_log.strftime('%H:%M:%S.%f')[:-3]}] Periodic_updater: cycle start. Actual time since last cycle finish: {actual_cycle_time_ms:.2f}ms")
+        
+        # Performance tracking
+        optimizer.start_timer("display_update_cycle")
 
         try:
-            update_display_content() 
+            # Only update display if we're not skipping this frame
+            if not should_skip:
+                # Time the actual display update
+                optimizer.start_timer("update_display_content")
+                update_display_content() 
+                update_time_ms = optimizer.end_timer("update_display_content")
+                
+                # Decide if we should skip the next frame if this one was slow
+                if SKIP_FRAMES_ON_SLOW and update_time_ms > SKIP_FRAME_THRESHOLD:
+                    optimizer.update_settings({"skip_frame_rendering": True})
+                    skip_count += 1
+                else:
+                    optimizer.update_settings({"skip_frame_rendering": False})
+            else:
+                skip_count += 1
+                # Reset skip flag after skipping one frame
+                optimizer.update_settings({"skip_frame_rendering": False})
             
+            # Calculate sleep time (adaptive based on performance)
             processing_time = time.monotonic() - loop_start_time
-            sleep_duration = DISPLAY_UPDATE_INTERVAL - processing_time
+            sleep_duration = max(0, current_interval - processing_time)
             
-            if sleep_duration < 0:
-                sleep_duration = 0 
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]}] [PERF_WARNING] Display update took {processing_time*1000:.2f}ms, exceeding interval of {DISPLAY_UPDATE_INTERVAL*1000:.2f}ms.")
-
-            # print(f"Display update processing: {processing_time*1000:.2f}ms, sleeping for: {sleep_duration*1000:.2f}ms") # Verbose
+            if processing_time > current_interval:
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]}] [PERF_WARNING] Display update took {processing_time*1000:.2f}ms, exceeding interval of {current_interval*1000:.2f}ms.")
+            
             time.sleep(sleep_duration) 
+            
+            # Record loop finish time
             last_loop_finish_time = time.monotonic()
+            
+            # Log performance stats periodically
+            if time.monotonic() - last_stats_time > 10:  # Every 10 seconds
+                total_time = time.monotonic() - last_stats_time
+                fps = frame_count / total_time
+                skip_percent = (skip_count / frame_count) * 100 if frame_count > 0 else 0
+                print(f"[PERF_STATS] FPS: {fps:.1f}, Frames: {frame_count}, Skipped: {skip_count} ({skip_percent:.1f}%)")
+                
+                # Get and log system stats if on Raspberry Pi
+                if pi_optimizer.is_raspberry_pi:
+                    sys_stats = pi_optimizer.get_system_stats()
+                    print(f"[SYS_STATS] CPU: {sys_stats['cpu_percent']}%, Memory: {sys_stats['memory_percent']}%, Temp: {sys_stats['temperature']}")
+                
+                # Reset counters
+                frame_count = 0
+                skip_count = 0
+                last_stats_time = time.monotonic()
+                
+                # Save performance log
+                optimizer.save_log()
+                
         except Exception as e:
             print(f"Error in periodic_display_updater: {e}")
             time.sleep(5) 
-            last_loop_finish_time = time.monotonic() # Update here too to avoid false long cycle time after error
+            last_loop_finish_time = time.monotonic()
+        
+        # Complete performance timing for this cycle
+        optimizer.end_timer("display_update_cycle")
+
+# Add route to get performance data
+@app.route('/api/performance_stats', methods=['GET'])
+def get_performance_stats():
+    """Return performance statistics"""
+    return jsonify(optimizer.get_performance_summary())
+
+# Add route to update performance settings
+@app.route('/api/performance_settings', methods=['POST'])
+def update_performance_settings():
+    """Update performance optimization settings"""
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "Invalid request data"})
+        
+    success = optimizer.update_settings(data)
+    return jsonify({"success": success, "settings": optimizer.get_settings()})
+
+# Add route to get system stats
+@app.route('/api/system_stats', methods=['GET'])
+def get_system_stats():
+    """Get system statistics (CPU, memory, temperature)"""
+    return jsonify(pi_optimizer.get_system_stats())
+
+# Add route to get auto rotation status
+@app.route('/api/get_auto_rotation_status', methods=['GET'])
+def get_auto_rotation_status():
+    """Get the current state of auto screen rotation"""
+    global AUTO_SCREEN_ROTATION_ENABLED
+    return jsonify(enabled=AUTO_SCREEN_ROTATION_ENABLED)
+
+# Add route to set auto rotation status
+@app.route('/api/set_auto_rotation_status', methods=['POST'])
+def set_auto_rotation_status():
+    """Enable or disable auto screen rotation"""
+    global AUTO_SCREEN_ROTATION_ENABLED, last_screen_change_time
+    
+    data = request.get_json()
+    if data is None or 'enabled' not in data or not isinstance(data['enabled'], bool):
+        return jsonify(success=False, message="Invalid request. 'enabled' (boolean) is required."), 400
+    
+    # Update auto rotation status
+    with data_lock:
+        AUTO_SCREEN_ROTATION_ENABLED = data['enabled']
+        if AUTO_SCREEN_ROTATION_ENABLED:
+            # Reset timer when enabling
+            last_screen_change_time = time.monotonic()
+            print(f"[AUTO_ROTATE] Auto screen rotation enabled, starting with current screen '{current_display_mode}'")
+        else:
+            print(f"[AUTO_ROTATE] Auto screen rotation disabled")
+    
+    return jsonify(success=True, enabled=AUTO_SCREEN_ROTATION_ENABLED)
 
 if __name__ == '__main__':
+    # Apply performance optimizations
+    print("Initializing performance optimizations...")
+    
+    # Configure app based on Raspberry Pi detection
+    flask_options = optimize_flask_app()
+    
+    # Update default settings based on environment
+    if pi_optimizer.is_raspberry_pi:
+        print("Running on Raspberry Pi - applying specific optimizations")
+        optimizer.update_settings({
+            "reduce_update_frequency": True,
+            "update_interval_multiplier": 2.0,
+            "minimize_logging": True
+        })
+    
     load_widget_classes()
     load_screen_layouts() # Initial load
     active_widget_instances.clear() # Ensure instances are fresh after initial load
@@ -664,5 +842,10 @@ if __name__ == '__main__':
     update_thread = threading.Thread(target=periodic_display_updater, daemon=True)
     update_thread.start()
     
-    # update_display_content() # Initial call, now handled by the thread almost immediately
-    app.run(debug=True, host='0.0.0.0', port=5001) 
+    # Start Flask app with optimized settings
+    app.run(
+        debug=flask_options["debug"], 
+        host=flask_options["host"], 
+        port=flask_options["port"],
+        threaded=flask_options["threaded"]
+    ) 

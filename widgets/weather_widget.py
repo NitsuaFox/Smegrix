@@ -172,7 +172,8 @@ class WeatherWidget(BaseWidget):
         if self.last_weather_data and effective_interval_seconds > 0 and \
            (current_monotonic_time - self.last_fetch_time) < effective_interval_seconds:
             # print(f"[WeatherWidget-{self.widget_id}] INFO: Using cached weather data.")
-            self._log("INFO", "Using cached weather data.")
+            # Comment out or reduce log frequency to decrease noise
+            # self._log("INFO", "Using cached weather data.")
             parsed_data = self._parse_weather_data(self.last_weather_data)
             try: return self.display_format.format_map(parsed_data)
             except KeyError as e: 
@@ -214,6 +215,7 @@ class WeatherWidget(BaseWidget):
 
         try:
             # print(f"[WeatherWidget-{self.widget_id}] INFO: Fetching weather for lat={self.latitude}, lon={self.longitude} (Location: '{self.location_name}')") # Params removed for brevity
+            # Only log when actually fetching new data (less frequent than cache checks)
             self._log("INFO", f"Fetching weather for lat={self.latitude}, lon={self.longitude} (Location: '{self.location_name}')")
             response = requests.get(self.API_BASE_URL, params=params, timeout=10)
             response.raise_for_status()
@@ -221,7 +223,8 @@ class WeatherWidget(BaseWidget):
             self.last_weather_data = response.json() # Cache the raw JSON
             self.last_fetch_time = current_monotonic_time
             # print(f"[WeatherWidget-{self.widget_id}] DEBUG: API Response: {self.last_weather_data}") # For debugging
-            self._log("DEBUG", f"API Response: {self.last_weather_data}")
+            # Comment out detailed debug logs unless needed for troubleshooting
+            # self._log("DEBUG", f"API Response: {self.last_weather_data}")
             
             parsed_data = self._parse_weather_data(self.last_weather_data)
             try: return self.display_format.format_map(parsed_data)
