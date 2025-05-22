@@ -17,8 +17,10 @@ class NetworkStatsWidget(BaseWidget):
         # Cache variables
         self._cached_ssid = None
         self._cached_ip = None
+        self._cached_rssi = None
         self._last_ssid_check_time = None
         self._last_ip_check_time = None
+        self._last_rssi_check_time = None
         self._cache_duration = timedelta(hours=48) # Cache for 48 hours
 
         # Cache variables for uptime
@@ -335,6 +337,87 @@ class NetworkStatsWidget(BaseWidget):
         self._log("INFO", "Windows IP fetching not yet implemented.")
         return "Win IP N/A"
 
+    def _get_rssi_macos(self) -> str:
+        """Fetches RSSI (signal strength) on macOS using the airport command."""
+        try:
+            process = subprocess.run(
+                ['/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport', '-I'],
+                capture_output=True, text=True, check=True, timeout=5
+            )
+            rssi_match = re.search(r"^\s*agrCtlRSSI: (.+)$", process.stdout, re.MULTILINE)
+            if rssi_match:
+                rssi = rssi_match.group(1).strip()
+                self._log("DEBUG", f"macOS RSSI found: {rssi}")
+                return f"{rssi} dBm"
+            else:
+                self._log("WARNING", "RSSI not found in airport output")
+                return "No RSSI"
+        except subprocess.CalledProcessError as e:
+            self._log("ERROR", f"Error fetching macOS RSSI with airport: {e}")
+            return "Err:Airport"
+        except FileNotFoundError:
+            self._log("ERROR", "airport command not found on macOS.")
+            return "Err:CmdNotFound"
+        except subprocess.TimeoutExpired:
+            self._log("ERROR", "Timeout fetching macOS RSSI.")
+            return "Err:Timeout"
+        except Exception as e:
+            self._log("ERROR", f"Unexpected error fetching macOS RSSI: {e}")
+            return "Err:RSSIGen"
+
+    def _get_rssi_linux(self) -> str:
+        """Fetches RSSI (signal strength) on Linux using iwgetid or iwconfig."""
+        wifi_interface = self._get_wifi_interface_linux()
+        if not wifi_interface:
+            self._log("WARNING", "No Wi-Fi interface found for RSSI on Linux.")
+            return "No Wi-Fi IF"
+        
+        try:
+            # Try iwgetid first
+            process = subprocess.run(['iwgetid', wifi_interface, '--signal'], 
+                                   capture_output=True, text=True, check=True, timeout=3)
+            output = process.stdout.strip()
+            if output:
+                # Output format: "wlan0:Signal level=XX dBm"
+                rssi_match = re.search(r"Signal level=(-?\d+)", output)
+                if rssi_match:
+                    rssi = rssi_match.group(1)
+                    self._log("DEBUG", f"Linux RSSI found via iwgetid: {rssi}")
+                    return f"{rssi} dBm"
+        except Exception:
+            self._log("DEBUG", "iwgetid failed, trying iwconfig")
+        
+        try:
+            # Fallback to iwconfig
+            process = subprocess.run(['iwconfig', wifi_interface], 
+                                   capture_output=True, text=True, check=True, timeout=3)
+            # Look for "Signal level=XX dBm" in iwconfig output
+            rssi_match = re.search(r"Signal level=(-?\d+)", process.stdout)
+            if rssi_match:
+                rssi = rssi_match.group(1)
+                self._log("DEBUG", f"Linux RSSI found via iwconfig: {rssi}")
+                return f"{rssi} dBm"
+            else:
+                self._log("WARNING", f"No RSSI found in iwconfig output for {wifi_interface}")
+                return "No Signal Data"
+        except subprocess.CalledProcessError as e:
+            self._log("ERROR", f"Error fetching Linux RSSI with iwconfig: {e}")
+            return "Err:iwconfig"
+        except FileNotFoundError:
+            self._log("ERROR", "iwconfig command not found on Linux.")
+            return "Err:CmdNotFound"
+        except subprocess.TimeoutExpired:
+            self._log("ERROR", "Timeout fetching Linux RSSI.")
+            return "Err:Timeout"
+        except Exception as e:
+            self._log("ERROR", f"Unexpected error fetching Linux RSSI: {e}")
+            return "Err:RSSIGen"
+
+    def _get_rssi_windows(self) -> str:
+        """Placeholder for fetching RSSI on Windows."""
+        self._log("INFO", "Windows RSSI fetching not yet implemented.")
+        return "Win RSSI N/A"
+
     def get_content(self) -> str:
         """Returns the selected network statistic based on the OS, using a cache."""
         now = datetime.now()
@@ -354,6 +437,11 @@ class NetworkStatsWidget(BaseWidget):
                 self._log("DEBUG", f"Returning cached uptime: {self._cached_uptime}")
                 return self._cached_uptime
             self._log("INFO", "Cache miss or stale for uptime. Fetching fresh data.")
+        elif self.stat_to_display == 'rssi':
+            if self._cached_rssi and self._last_rssi_check_time and (now - self._last_rssi_check_time < self._cache_duration):
+                self._log("DEBUG", f"Returning cached RSSI: {self._cached_rssi}")
+                return self._cached_rssi
+            self._log("INFO", "Cache miss or stale for RSSI. Fetching fresh data.")
 
         current_os = self.os_override
         if current_os == 'auto':
@@ -389,6 +477,13 @@ class NetworkStatsWidget(BaseWidget):
             self._cached_uptime = fetched_value
             self._last_uptime_check_time = now
             self._log("INFO", f"Fetched and cached uptime: {self._cached_uptime}")
+        elif self.stat_to_display == 'rssi':
+            if current_os == 'macos': fetched_value = self._get_rssi_macos()
+            elif current_os == 'linux': fetched_value = self._get_rssi_linux()
+            elif current_os == 'windows': fetched_value = self._get_rssi_windows()
+            self._cached_rssi = fetched_value
+            self._last_rssi_check_time = now
+            self._log("INFO", f"Fetched and cached RSSI: {self._cached_rssi}")
         else:
             self._log("WARNING", f"Invalid stat_to_display ('{self.stat_to_display}') or OS ('{current_os}') combination.")
             return "Cfg Err"
@@ -407,7 +502,8 @@ class NetworkStatsWidget(BaseWidget):
                 'options': [
                     {'value': 'ssid', 'label': 'SSID (Network Name)'},
                     {'value': 'ip', 'label': 'IP Address'},
-                    {'value': 'uptime', 'label': 'System Uptime'}
+                    {'value': 'uptime', 'label': 'System Uptime'},
+                    {'value': 'rssi', 'label': 'RSSI (Signal Strength)'}
                 ],
                 'description': 'Choose which network statistic to display.'
             },

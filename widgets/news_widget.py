@@ -11,7 +11,7 @@ class NewsWidget(BaseWidget):
     DEFAULT_RSS_URL = "http://feeds.bbci.co.uk/news/rss.xml"  # BBC News top stories
     DEFAULT_UPDATE_INTERVAL_MINS = 5
     DEFAULT_NUM_HEADLINES = 5
-    DEFAULT_SCROLL_INTERVAL_MS = 50 # Time in ms between 1-pixel shifts
+    DEFAULT_SCROLL_INTERVAL_MS = 40 # Reduced from 50ms for smoother animation (25px/sec)
     HEADLINE_SEPARATOR = "  •••  " 
     SCROLL_PADDING = "     " 
     INITIAL_LOADING_MESSAGE = "Loading news..."
@@ -30,6 +30,8 @@ class NewsWidget(BaseWidget):
         self.last_fetch_time = 0
         self.current_scroll_text = self.INITIAL_LOADING_MESSAGE # Initial state
         self.current_pixel_offset = 0
+        self.fractional_pixel_offset = 0.0  # Use floating point for sub-pixel accuracy
+        self.pixels_per_second = 1000.0 / self.scroll_interval_ms  # Calculate pixels per second for smooth scrolling
         self.text_is_scrollable = False
         self.looping_point_pixels = 0 
         self.time_of_last_pixel_shift = time.monotonic()
@@ -46,6 +48,9 @@ class NewsWidget(BaseWidget):
         # Initial fetch and build
         self._trigger_fetch_if_needed(force_fetch=True) # Start initial fetch
         self._build_and_measure_scroll_text() # Build with loading/empty message initially
+        
+        # Debug info for smooth scrolling setup
+        self._log("DEBUG", f"NewsWidget smooth scrolling initialized: {self.pixels_per_second:.2f} pixels/second, interval: {self.scroll_interval_ms}ms")
 
     def reconfigure(self):
         super().reconfigure()
@@ -62,6 +67,7 @@ class NewsWidget(BaseWidget):
             self.font_size = self.config.get('font_size', "medium")
             self.scroll_interval_ms = self.config.get('scroll_interval_ms', self.DEFAULT_SCROLL_INTERVAL_MS)
             self.scroll_interval_seconds = self.scroll_interval_ms / 1000.0
+            self.pixels_per_second = 1000.0 / self.scroll_interval_ms  # Update pixels per second for smooth scrolling
 
             config_affecting_fetch_changed = (old_rss_url != self.rss_url or old_num_headlines != self.num_headlines)
             font_size_changed = old_font_size != self.font_size
@@ -83,8 +89,10 @@ class NewsWidget(BaseWidget):
                 # When fetch completes, update_scroll_state will rebuild again if data changed.
                 self._build_and_measure_scroll_text() 
                 self.current_pixel_offset = 0
+                self.fractional_pixel_offset = 0.0
                 self.time_of_last_pixel_shift = time.monotonic()
             elif scroll_speed_changed:
+                self._log("DEBUG", f"Scroll speed changed from {old_scroll_interval_ms}ms to {self.scroll_interval_ms}ms")
                 self.time_of_last_pixel_shift = time.monotonic()
             
             self._prev_rss_url = self.rss_url
@@ -208,16 +216,6 @@ class NewsWidget(BaseWidget):
             self.looping_point_pixels = base_w # Not scrolling, its own width is its boundary
 
     def update_scroll_state(self):
-        # Check if a fetch is needed (e.g. interval passed)
-        # This also handles the case where a fetch completed and headlines_cache might have changed.
-        # We need a way to know if _fetch_news_background resulted in *new* data
-        # to trigger _build_and_measure_scroll_text.
-        # Let's simplify: _trigger_fetch_if_needed starts the fetch.
-        # _build_and_measure_scroll_text will use the latest headlines_cache.
-        # The key is to call _build_and_measure_scroll_text if headlines_cache could have changed.
-        # The background thread updates headlines_cache.
-        # So, if a fetch was running, assume it might have changed, or check a flag.
-        
         # Store current text to see if it changes after potential fetch and rebuild
         prev_scroll_text = self.current_scroll_text
         
@@ -225,28 +223,41 @@ class NewsWidget(BaseWidget):
         self._trigger_fetch_if_needed() 
 
         # Always rebuild text, as headlines_cache might have been updated by the background thread.
-        # Or, only rebuild if a fetch was recently completed.
-        # For now, let's always rebuild to ensure consistency after potential background update.
-        # This could be optimized by a flag set by the background thread.
         self._build_and_measure_scroll_text()
 
         if prev_scroll_text != self.current_scroll_text:
-            self._log("DEBUG", "News scroll text changed, resetting scroll offset.")
+            self._log("DEBUG", "News scroll text changed, resetting scroll position.")
             self.current_pixel_offset = 0
+            self.fractional_pixel_offset = 0.0
             self.time_of_last_pixel_shift = time.monotonic()
-
 
         if self.text_is_scrollable:
             current_time = time.monotonic()
-            if current_time - self.time_of_last_pixel_shift >= self.scroll_interval_seconds:
-                self.current_pixel_offset += 1 
-                self.time_of_last_pixel_shift += self.scroll_interval_seconds 
-                if self.time_of_last_pixel_shift < current_time - self.scroll_interval_seconds:
-                    self.time_of_last_pixel_shift = current_time
-                if self.current_pixel_offset >= self.looping_point_pixels:
-                    self.current_pixel_offset = 0 
+            elapsed_time = current_time - self.time_of_last_pixel_shift
+            
+            # Calculate fractional pixel advancement based on elapsed time
+            # This provides smooth, frame-rate independent scrolling
+            pixel_advancement = elapsed_time * self.pixels_per_second
+            self.fractional_pixel_offset += pixel_advancement
+            
+            # Get integer pixel offset for rendering and handle looping
+            if self.looping_point_pixels > 0:
+                self.current_pixel_offset = int(self.fractional_pixel_offset) % self.looping_point_pixels
+                # Keep fractional offset in sync to prevent drift
+                if self.fractional_pixel_offset >= self.looping_point_pixels:
+                    self.fractional_pixel_offset -= self.looping_point_pixels
+            else:
+                self.current_pixel_offset = 0
+                self.fractional_pixel_offset = 0.0
+            
+            self.time_of_last_pixel_shift = current_time
+            
+            # Debug logging for troubleshooting (only log occasionally to avoid spam)
+            if int(current_time) % 5 == 0 and abs(current_time - int(current_time)) < 0.1:
+                self._log("DEBUG", f"Scroll state: pixel_offset={self.current_pixel_offset}, fractional={self.fractional_pixel_offset:.2f}, speed={self.pixels_per_second:.2f}px/s")
         else:
             self.current_pixel_offset = 0
+            self.fractional_pixel_offset = 0.0
 
     def get_visible_text_segment(self) -> str:
         if not self.current_scroll_text or self.current_scroll_text == self.INITIAL_LOADING_MESSAGE or not self.text_is_scrollable:
@@ -301,8 +312,8 @@ class NewsWidget(BaseWidget):
             { 'name': 'rss_url', 'label': 'RSS Feed URL', 'type': 'text', 'default': NewsWidget.DEFAULT_RSS_URL },
             { 'name': 'update_interval_minutes', 'label': 'Update Interval (minutes)', 'type': 'number', 'default': NewsWidget.DEFAULT_UPDATE_INTERVAL_MINS, 'min': 1 },
             { 'name': 'num_headlines', 'label': 'Number of Headlines', 'type': 'number', 'default': NewsWidget.DEFAULT_NUM_HEADLINES, 'min': 1, 'max': 20 },
-            { 'name': 'scroll_interval_ms', 'label': 'Scroll Interval (ms per 1px shift)', 'type': 'number', 'default': NewsWidget.DEFAULT_SCROLL_INTERVAL_MS, 'min': 10, 'max': 500,
-              'description': 'Time between 1-pixel shifts. Lower is faster. E.g., 50ms = 20px/sec.' },
+            { 'name': 'scroll_interval_ms', 'label': 'Scroll Speed (ms per pixel)', 'type': 'number', 'default': NewsWidget.DEFAULT_SCROLL_INTERVAL_MS, 'min': 10, 'max': 500,
+              'description': 'Milliseconds between each pixel movement. Lower values = faster, smoother scrolling. Uses fractional positioning for sub-pixel accuracy.' },
             { 'name': 'font_size', 'label': 'Font Size', 'type': 'select', 'default': 'medium', 'options': [
                 {'value': 'small', 'label': 'Small (3x5)'}, {'value': 'medium', 'label': 'Medium (5x7)'},
                 {'value': 'large', 'label': 'Large (7x9)'}, {'value': 'xl', 'label': 'Extra Large (9x13)'}

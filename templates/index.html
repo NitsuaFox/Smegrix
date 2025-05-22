@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>64x64 Matrix Simulator</title>
+    <title>Smegtrix v2.0</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -944,7 +944,7 @@
             updateMenuButtons(jsCurrentDisplayMode); 
             setInterval(async () => {
                 await fetchAndUpdateMatrix(); 
-            }, 50);
+            }, 40); // Changed from 50ms (20 FPS) to 40ms (25 FPS)
         }
 
         // --- Matrix Log Toggle --- 

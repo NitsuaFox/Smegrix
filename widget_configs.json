@@ -28,7 +28,10 @@
         "enabled": true,
         "id": "net_ssid_value",
         "screen": "net_config",
-        "type": "network_ssid",
+        "type": "network_stats",
+        "stat_to_display": "ssid",
+        "os_override": "auto",
+        "font_size": "medium",
         "x": 1,
         "y": 10
     },
@@ -45,7 +48,10 @@
         "enabled": true,
         "id": "net_rssi_value",
         "screen": "net_config",
-        "type": "network_rssi",
+        "type": "network_stats",
+        "stat_to_display": "rssi",
+        "os_override": "auto",
+        "font_size": "medium",
         "x": 1,
         "y": 28
     }

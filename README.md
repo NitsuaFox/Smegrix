@@ -55,8 +55,8 @@ Smegtrix is a Python-based simulator and controller for a 64x64 LED matrix displ
 │   ├── date_widget.py      # Displays current date, configurable format & font
 │   ├── text_widget.py      # Displays static text
 │   ├── weather_widget.py   # Displays weather forecast with advanced formatting (Open-Meteo)
-│   ├── network_stats_widget.py # Displays network SSID or IP (macOS, Linux)
-│   ├── network_rssi_widget.py # Displays network RSSI (macOS specific via global context)
+│   ├── network_stats_widget.py # Displays network SSID, IP, uptime, or RSSI (macOS, Linux)
+
 │   ├── news_widget.py      # Displays scrolling RSS news headlines
 │   └── __init__.py         # Makes 'widgets' a Python package
 ├── static/                 # Static assets
@@ -249,14 +249,10 @@ Uses Open-Meteo API. No API key required for basic forecast.
 
 ### Network Stats Widget (`network_stats_widget.py`)
 Displays network information. Data is cached.
-*   `stat_to_display`: Select "ssid" (network name), "ip" (IP address), or "uptime" (system uptime).
+*   `stat_to_display`: Select "ssid" (network name), "ip" (IP address), "uptime" (system uptime), or "rssi" (signal strength).
 *   `os_override`: Select "auto-detect", "macos", "linux". (Windows support is placeholder).
 *   `font_size`: Select from available font sizes.
 
-### Network RSSI Widget (`network_rssi_widget.py`)
-Displays Wi-Fi signal strength (RSSI).
-*   Relies on `rssi` value being present in the `global_context` provided by `app.py` (currently specific to macOS `airport` command).
-*   No specific configuration options beyond base settings (position, color, etc.). `font_size` is not explicitly listed in its `get_config_options` but might be added if desired.
 
 ### Text Widget (`text_widget.py`)
 *   `text`: The static text string to display.

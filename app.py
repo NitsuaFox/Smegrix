@@ -48,7 +48,7 @@ pi_optimizer = RaspberryPiOptimizer()
 
 # Performance settings
 app_optimizations = get_app_optimizations()
-DISPLAY_UPDATE_INTERVAL = 0.1 if app_optimizations["reduce_update_frequency"] else 0.05  # seconds
+DISPLAY_UPDATE_INTERVAL = 0.1 if app_optimizations["reduce_update_frequency"] else 0.04  # Target ~25 FPS for normal, 10 FPS for reduced
 SKIP_FRAMES_ON_SLOW = True  # Skip frames if processing is too slow
 SKIP_FRAME_THRESHOLD = app_optimizations["skip_frame_threshold"]  # ms
 MATRIX_DATA_LOGGING_ENABLED = True # Global flag for matrix_data route logging
@@ -148,9 +148,9 @@ default_screen_layouts = {
         "name": "Network Info",
         "widgets": [
             {"id": "ncf_lbl_ssid", "type": "text", "text": "SSID:", "x": 1, "y": 1, "enabled": True, "color": "#FFFF00"},
-            {"id": "ncf_val_ssid", "type": "network_ssid", "x": 1, "y": 1 + 7 + 2, "enabled": True, "color": "#FFFFFF"},
+            {"id": "ncf_val_ssid", "type": "network_stats", "stat_to_display": "ssid", "os_override": "auto", "font_size": "medium", "x": 1, "y": 1 + 7 + 2, "enabled": True, "color": "#FFFFFF"},
             {"id": "ncf_lbl_rssi", "type": "text", "text": "RSSI:", "x": 1, "y": 1 + 2*(7 + 2), "enabled": True, "color": "#FFFF00"},
-            {"id": "ncf_val_rssi", "type": "network_rssi", "x": 1, "y": 1 + 3*(7 + 2), "enabled": True, "color": "#FFFFFF"}
+            {"id": "ncf_val_rssi", "type": "network_stats", "stat_to_display": "rssi", "os_override": "auto", "font_size": "medium", "x": 1, "y": 1 + 3*(7 + 2), "enabled": True, "color": "#FFFFFF"}
         ],
         "display_time_seconds": 15
     }
@@ -313,44 +313,14 @@ def _set_matrix_logging_enabled_and_save(status: bool):
         return False
 
 def _prepare_global_widget_context(current_time, current_screen_widget_configs):
-    """Prepares the global context dictionary for widgets, fetching network info if needed."""
-    ssid_val, rssi_val = ("N/A", "N/A") # Defaults
-    needs_net_info = any(
-        widget_config.get('type') in AVAILABLE_WIDGETS and \
-        (AVAILABLE_WIDGETS[widget_config.get('type')].__name__ in ['NetworkSSIDWidget', 'NetworkRSSIDWidget']) and \
-        widget_config.get('enabled', False)
-        for widget_config in current_screen_widget_configs
-    )
-    if needs_net_info:
-        # Consider if get_network_info_macos() should be more generic or platform-dependent here
-        ssid_val, rssi_val = get_network_info_macos() 
-
+    """Prepares the global context dictionary for widgets."""
     return {
         'now': current_time,
-        'ssid': ssid_val,
-        'rssi': rssi_val,
         'get_text_dimensions': matrix_display.get_text_dimensions, # Pass the method itself
         'matrix_width': MATRIX_WIDTH
     }
 
-def get_network_info_macos():
-    ssid = "N/A"
-    rssi = "N/A"
-    try:
-        process = subprocess.run(
-            ['/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport', '-I'],
-            capture_output=True, text=True, check=True, timeout=5 
-        )
-        output = process.stdout
-        ssid_match = re.search(r"^\s*SSID: (.+)$", output, re.MULTILINE)
-        if ssid_match:
-            ssid = ssid_match.group(1).strip()[:10]
-        rssi_match = re.search(r"^\s*agrCtlRSSI: (.+)$", output, re.MULTILINE)
-        if rssi_match:
-            rssi = rssi_match.group(1).strip()
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
-        print(f"Error fetching network info: {e}")
-    return ssid, rssi
+
 
 # --- Routes ---
 @app.route('/')
@@ -516,9 +486,11 @@ def update_display_content():
 
         if not widgets_on_current_screen_config:
             current_frame_widget_dimensions = new_dimensions_this_frame # Ensure it's updated even if no widgets
+            # Ensure overall widget processing timer is ended if we return early
+            optimizer.end_timer("widget_processing_loop_overall") 
             return
 
-        optimizer.start_timer("widget_processing_loop")
+        optimizer.start_timer("widget_processing_loop_overall") # Renamed from widget_processing_loop to be more specific
         for widget_config in widgets_on_current_screen_config:
             if not widget_config.get('enabled', False):
                 continue
@@ -551,21 +523,58 @@ def update_display_content():
                 if instance: # Ensure instance was successfully created/retrieved
                     try:
                         optimizer.start_timer(f"widget_{widget_id}_get_content")
-                        text_to_draw = instance.get_content()
+                        # content can be a string (for text) or a dict (for pixel_map)
+                        content = instance.get_content()
                         optimizer.end_timer(f"widget_{widget_id}_get_content")
 
-                        final_draw_x = instance.x 
+                        final_draw_x = instance.x
+                        final_draw_y = instance.y # y-coordinate of the widget
 
-                        if text_to_draw: 
+                        # Check if content is a dictionary and of type 'pixel_map'
+                        if isinstance(content, dict) and content.get('type') == 'pixel_map':
+                            pixel_data = content.get('data', [])
+                            map_width = content.get('width', 0)
+                            map_height = content.get('height', 0)
+                            
+                            # Add dimensions for this pixel_map widget
+                            new_dimensions_this_frame.append({
+                                'id': widget_id,
+                                'width_cells': map_width,
+                                'height_cells': map_height
+                            })
+
+                            optimizer.start_timer(f"widget_{widget_id}_draw_pixel_map")
+                            if pixel_data and map_width > 0 and map_height > 0:
+                                # OLD METHOD - Loop and set_pixel:
+                                # for r_idx, row in enumerate(pixel_data):
+                                #     if r_idx >= map_height: break # Respect map_height
+                                #     for c_idx, color_tuple in enumerate(row):
+                                #         if c_idx >= map_width: break # Respect map_width
+                                #         if isinstance(color_tuple, tuple) and len(color_tuple) == 3 and all(isinstance(c, int) and 0 <= c <= 255 for c in color_tuple):
+                                #             abs_x = final_draw_x + c_idx
+                                #             abs_y = final_draw_y + r_idx
+                                #             if 0 <= abs_x < MATRIX_WIDTH and 0 <= abs_y < MATRIX_HEIGHT:
+                                #                  matrix_display.set_pixel(abs_x, abs_y, color_tuple)
+                                
+                                # NEW METHOD - Use draw_pixel_map
+                                matrix_display.draw_pixel_map(final_draw_x, final_draw_y, pixel_data)
+                                         
+                            optimizer.end_timer(f"widget_{widget_id}_draw_pixel_map")
+
+                        # Else, assume it's text content (string)
+                        elif isinstance(content, str) and content: 
+                            text_to_draw = content
                             rgb_color_tuple = hex_to_rgb(instance.color)
                             font_name_to_pass = None
                             if hasattr(instance, 'font_size'):
+                                # Re-map font_size string to actual font file name/key
                                 if instance.font_size == 'small': font_name_to_pass = '3x5'
                                 elif instance.font_size == 'medium': font_name_to_pass = '5x7'
                                 elif instance.font_size == 'large': font_name_to_pass = '7x9'
                                 elif instance.font_size == 'xl': font_name_to_pass = 'xl' 
                             
                             try:
+                                # Calculate dimensions for text
                                 width_cells, height_cells = matrix_display.get_text_dimensions(text_to_draw, font_name_to_pass)
                                 new_dimensions_this_frame.append({
                                     'id': widget_id,
@@ -573,21 +582,27 @@ def update_display_content():
                                     'height_cells': height_cells
                                 })
                             except Exception as dim_error:
-                                print(f"Error calculating dimensions for widget {widget_id}: {dim_error}")
+                                print(f"Error calculating dimensions for widget {widget_id} (text): {dim_error}")
+                                # Provide default dimensions on error
                                 new_dimensions_this_frame.append({
                                     'id': widget_id,
-                                    'width_cells': 5, 
-                                    'height_cells': 7  
+                                    'width_cells': 5, # Default width
+                                    'height_cells': 7  # Default height (e.g. for medium font)
                                 })
                             
                             optimizer.start_timer(f"widget_{widget_id}_draw_text")
-                            matrix_display.draw_text(text_to_draw, final_draw_x, instance.y, color_tuple=rgb_color_tuple, font_name=font_name_to_pass)
+                            matrix_display.draw_text(text_to_draw, final_draw_x, final_draw_y, rgb_color_tuple, font_name_to_pass)
                             optimizer.end_timer(f"widget_{widget_id}_draw_text")
+                        # elif content: # If content is not None/empty string but not a handled type
+                        #    instance._log("WARNING", f"Received unhandled content type from get_content(): {type(content)}")
+
                     except Exception as e:
                         print(f"Error processing widget '{widget_config.get('id', widget_type)}': {e}")
+                        # Ensure individual widget processing timer is stopped in case of error within the loop
+                        optimizer.end_timer(f"widget_{widget_id}_processing")
             else:
                 print(f"Warning: Widget type '{widget_type}' not found in AVAILABLE_WIDGETS.")
-        optimizer.end_timer("widget_processing_loop")
+        optimizer.end_timer("widget_processing_loop_overall") # Renamed
         
         current_frame_widget_dimensions = new_dimensions_this_frame
 
@@ -827,7 +842,6 @@ if __name__ == '__main__':
     if pi_optimizer.is_raspberry_pi:
         print("Running on Raspberry Pi - applying specific optimizations")
         optimizer.update_settings({
-            "reduce_update_frequency": True,
             "update_interval_multiplier": 2.0,
             "minimize_logging": True
         })

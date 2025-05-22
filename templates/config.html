@@ -535,6 +535,37 @@
             // Expose debug function globally
             window.debugDumpWidgets = debugDumpWidgets;
 
+            // Function to update visibility of conditional fields
+            function updateConditionalFields(widgetDiv, widgetConfig) {
+                const widgetDefinition = availableWidgetTypes.find(p => p.type === widgetConfig.type);
+                if (!widgetDefinition || !widgetDefinition.configOptions) return;
+
+                widgetDefinition.configOptions.forEach(option => {
+                    if (option.condition) {
+                        const controllerField = widgetDiv.querySelector(`[data-config-key="${option.condition.field}"]`);
+                        const targetElementWrapper = widgetDiv.querySelector(`#${widgetDiv.dataset.baseName}_${option.name}_wrapper`);
+                        
+                        if (controllerField && targetElementWrapper) {
+                            let conditionMet = false;
+                            if (controllerField.type === 'checkbox') {
+                                conditionMet = controllerField.checked === option.condition.value;
+                            } else {
+                                conditionMet = controllerField.value === option.condition.value;
+                            }
+
+                            const action = option.condition.action || 'show'; // Default to 'show'
+
+                            if (action === 'show') {
+                                targetElementWrapper.style.display = conditionMet ? '' : 'none';
+                            } else if (action === 'enable') {
+                                const inputElement = targetElementWrapper.querySelector('.widget-config-input');
+                                if (inputElement) inputElement.disabled = !conditionMet;
+                            }
+                        }
+                    }
+                });
+            }
+
             function renderWidgetInstanceAndReturn(widget, screenId, widgetIndex) {
                 const widgetDiv = document.createElement('div');
                 widgetDiv.classList.add('widget-config');
@@ -543,6 +574,7 @@
                 widgetDiv.dataset.widgetIndex = widgetIndex;
                 
                 const baseName = `s_${screenId}_w_${widget.id.replace(/\W/g, '_')}_idx${widgetIndex}`;
+                widgetDiv.dataset.baseName = baseName; // Store baseName for easy access
 
                 let configFieldsHTML = '';
                 const widgetDefinition = availableWidgetTypes.find(p => p.type === widget.type);
@@ -551,12 +583,14 @@
                     widgetDefinition.configOptions.forEach(option => {
                         const fieldId = `${baseName}_${option.name}`;
                         const currentValue = widget[option.name] !== undefined ? widget[option.name] : option.default;
+                        const wrapperId = `${fieldId}_wrapper`; // ID for the wrapper div
                         
-                        configFieldsHTML += `<div class="form-group">
+                        // Start wrapper div for conditional display
+                        configFieldsHTML += `<div class="form-group" id="${wrapperId}">
                             <label for="${fieldId}">${option.label || option.name}:</label>`;
                         
-                        if (option.type === 'text' || option.type === 'string') {
-                            configFieldsHTML += `<input type="text" id="${fieldId}" name="${fieldId}" class="widget-config-input" data-config-key="${option.name}" value="${escapeHtml(currentValue)}" placeholder="${escapeHtml(option.placeholder || '')}">`;
+                        if (option.type === 'text' || option.type === 'string' || option.type === 'color') { // Added 'color' type handling
+                            configFieldsHTML += `<input type="${option.type === 'color' ? 'color' : 'text'}" id="${fieldId}" name="${fieldId}" class="widget-config-input" data-config-key="${option.name}" value="${escapeHtml(currentValue)}" placeholder="${escapeHtml(option.placeholder || '')}">`;
                         } else if (option.type === 'number') {
                             configFieldsHTML += `<input type="number" id="${fieldId}" name="${fieldId}" class="widget-config-input" data-config-key="${option.name}" value="${currentValue}" placeholder="${escapeHtml(option.placeholder || '')}">`;
                         } else if (option.type === 'checkbox') {
@@ -640,6 +674,24 @@
                         toggleButton.textContent = '▶'; // Collapsed indicator
                     } else {
                         toggleButton.textContent = '▼'; // Expanded indicator
+                    }
+                });
+
+                // After rendering, set up event listeners for conditional fields
+                // And call updateConditionalFields once to set initial state
+                requestAnimationFrame(() => { // Ensure elements are in DOM
+                    const widgetDefinition = availableWidgetTypes.find(p => p.type === widget.type);
+                    if (widgetDefinition && widgetDefinition.configOptions) {
+                        widgetDefinition.configOptions.forEach(option => {
+                            if (option.condition) {
+                                const controllerField = widgetDiv.querySelector(`[data-config-key="${option.condition.field}"]`);
+                                if (controllerField) {
+                                    controllerField.addEventListener('change', () => updateConditionalFields(widgetDiv, widget));
+                                    controllerField.addEventListener('input', () => updateConditionalFields(widgetDiv, widget)); // For text fields, sliders if added
+                                }
+                            }
+                        });
+                        updateConditionalFields(widgetDiv, widget); // Initial check
                     }
                 });
 

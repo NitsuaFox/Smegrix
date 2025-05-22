@@ -269,7 +269,7 @@ def optimize_flask_app():
 def get_app_optimizations():
     """Get recommendations for application optimizations"""
     return {
-        "reduce_update_frequency": True,
+        "reduce_update_frequency": False,
         "recommended_update_interval": 0.1,  # seconds
         "skip_frame_threshold": 100,  # ms
         "disable_widget_animations": True,

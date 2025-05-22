@@ -303,6 +303,41 @@ class Display:
 
         return (calculated_width, font_char_height)
 
+    def draw_pixel_map(self, x_offset, y_offset, pixel_map_data):
+        """
+        Draws a pre-rendered pixel_map onto the main display buffer.
+        x_offset, y_offset: Top-left coordinates on the main display where the pixel_map should be placed.
+        pixel_map_data: A 2D list (list of lists) where each inner list is a row of (R,G,B) color tuples.
+        """
+        if not pixel_map_data or not isinstance(pixel_map_data, list):
+            return
+
+        map_height = len(pixel_map_data)
+        if map_height == 0:
+            return
+        
+        map_width = len(pixel_map_data[0]) # Assume all rows have the same width
+        if map_width == 0:
+            return
+
+        for r_idx in range(map_height):
+            if r_idx + y_offset >= self.height: # Stop if map goes off bottom edge
+                break
+            for c_idx in range(map_width):
+                if c_idx + x_offset >= self.width: # Stop if map goes off right edge for this row
+                    break
+                
+                color_tuple = pixel_map_data[r_idx][c_idx]
+                
+                # Validate color_tuple before setting (copied from set_pixel)
+                if not (isinstance(color_tuple, tuple) and len(color_tuple) == 3 and all(isinstance(c, int) and 0 <= c <= 255 for c in color_tuple)):
+                    # This case should ideally not happen if pixel_map_data is well-formed
+                    # print(f"Warning: Invalid color in pixel_map at ({r_idx},{c_idx}): {color_tuple}. Skipping pixel.")
+                    continue # Or set to a default error color, but skipping is safer for now
+
+                # Direct buffer update without individual set_pixel call overhead
+                self.pixel_buffer[y_offset + r_idx][x_offset + c_idx] = color_tuple
+
     def get_buffer(self):
         """
         Returns the current pixel buffer.
