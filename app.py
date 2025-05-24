@@ -15,6 +15,14 @@ import logging # Added for custom log filter
 from performance_optimizer import optimizer
 from performance_utils import RaspberryPiOptimizer, optimize_flask_app, get_app_optimizations
 
+# Import rpi-rgb-led-matrix library
+try:
+    from rgbmatrix import RGBMatrix, RGBMatrixOptions
+    RGB_MATRIX_AVAILABLE = True
+except ImportError:
+    RGB_MATRIX_AVAILABLE = False
+    print("WARNING: RGBMatrix library not found. Hardware display will not be available.")
+
 # Import BaseWidget to check instance types, though specific widgets are loaded dynamically
 from widgets.base_widget import BaseWidget 
 
@@ -26,6 +34,27 @@ MATRIX_HEIGHT = 64
 
 # Create a single Display instance that will be used throughout the application
 matrix_display = Display(width=MATRIX_WIDTH, height=MATRIX_HEIGHT)
+
+# --- RGB Matrix Hardware Initialization ---
+hardware_matrix = None
+if RGB_MATRIX_AVAILABLE:
+    try:
+        print("INFO: Initializing RGB LED Matrix hardware...")
+        options = RGBMatrixOptions()
+        options.rows = MATRIX_HEIGHT
+        options.cols = MATRIX_WIDTH
+        options.chain_length = 1
+        options.parallel = 1
+        options.hardware_mapping = 'adafruit-hat' # Or 'adafruit-hat-pwm' if quality mode was used
+        options.gpio_slowdown = 2 # Adjust as needed (1-4 typically)
+        options.disable_hardware_pulsing = False # Usually False for Adafruit HAT/Bonnet
+        # options.brightness = 50 # Optional: Set brightness (0-100)
+        hardware_matrix = RGBMatrix(options=options)
+        print("SUCCESS: RGB LED Matrix hardware initialized.")
+    except Exception as e:
+        print(f"ERROR: Failed to initialize RGB LED Matrix hardware: {e}")
+        hardware_matrix = None # Ensure it's None if initialization fails
+# --- End RGB Matrix Hardware Initialization ---
 
 # Current display mode
 current_display_mode = 'default' 
@@ -227,43 +256,52 @@ def load_screen_layouts():
         screen_layouts = default_screen_layouts.copy()
         _save_layouts_to_file()
 
-def _save_layouts_to_file():
-    global screen_layouts, MATRIX_DATA_LOGGING_ENABLED
-    try:
-        data_to_save = {'matrix_data_logging_enabled': MATRIX_DATA_LOGGING_ENABLED}
-        data_to_save.update(screen_layouts)
+def _save_layouts_to_file_threaded(): # Renamed for clarity
+    global screen_layouts, MATRIX_DATA_LOGGING_ENABLED, data_lock 
 
+    layouts_copy = {}
+    logging_enabled_copy = False
+    with data_lock: 
+        # Make deep copies if screen_layouts contains mutable objects (like lists/dicts)
+        # that could be modified elsewhere while the save is in progress.
+        # json.loads(json.dumps(obj)) is a common way for deepish copy of JSON-serializable data.
+        try:
+            layouts_copy = json.loads(json.dumps(screen_layouts))
+        except Exception as e:
+            print(f"Error deep copying screen_layouts for threaded save: {e}. Falling back to shallow copy.")
+            layouts_copy = screen_layouts.copy() # Fallback, might not be safe if nested dicts are modified
+        logging_enabled_copy = MATRIX_DATA_LOGGING_ENABLED
+
+    data_to_save = {'matrix_data_logging_enabled': logging_enabled_copy}
+    data_to_save.update(layouts_copy)
+
+    try:
         with open(SCREEN_LAYOUTS_FILE_PATH, 'w') as f:
             json.dump(data_to_save, f, indent=4)
-        print(f"Screen layouts and global settings (matrix logging: {MATRIX_DATA_LOGGING_ENABLED}) saved to {SCREEN_LAYOUTS_FILE_PATH}")
-        return True
+        print(f"Successfully saved screen layouts and settings to {SCREEN_LAYOUTS_FILE_PATH} in background thread.")
     except Exception as e:
-        print(f"Error saving screen layouts to {SCREEN_LAYOUTS_FILE_PATH}: {e}")
-        return False
+        print(f"Error saving screen layouts to {SCREEN_LAYOUTS_FILE_PATH} in background thread: {e}")
 
 def _update_and_save_screen_layouts(new_layouts_data):
-    """Updates the global screen_layouts, clears active instances, and saves to file."""
+    """Updates the global screen_layouts, clears active instances, and saves to file in a background thread."""
     global screen_layouts, active_widget_instances
-    # No lock needed here if this function is always called within a lock from the route
-    # or if the calling context is responsible for locking.
-    # For now, assuming the route will handle the lock for atomicity of request processing.
+    # The main route save_screen_layouts_route already holds data_lock for updating screen_layouts
+    
     screen_layouts = new_layouts_data
-    active_widget_instances.clear()
-    print("Cleared active_widget_instances due to layout save.")
-    return _save_layouts_to_file()
+    active_widget_instances.clear() 
+    print("Cleared active_widget_instances due to layout save (triggered by _update_and_save_screen_layouts).")
+    
+    # Run the save operation in a new thread
+    save_thread = threading.Thread(target=_save_layouts_to_file_threaded)
+    save_thread.daemon = True # Ensure thread doesn't prevent app exit
+    save_thread.start()
+    
+    return True # Return immediately (optimistic success)
 
 def _add_new_screen(screen_id, screen_name):
     """Adds a new screen to the global screen_layouts and saves to file."""
     global screen_layouts, active_widget_instances
-    # Assuming lock is handled by the caller (the route function)
-    if screen_id in screen_layouts:
-        # This check is also in the route, but good for the helper to be safe if called elsewhere.
-        # The route can return a specific error before calling this if ID exists.
-        # For now, this makes the helper robust but might lead to a generic error if route doesn't pre-check.
-        # Or, we can let the route do the pre-check and this helper assumes ID is new.
-        # Let's assume the route does the pre-check for cleaner error messages from route.
-        pass # Route should prevent this, but if called directly, this would be an issue. 
-             # Decision: Route will do the pre-check. This func assumes ID is new for its context.
+    # Assuming lock is handled by the caller (the route function) for screen_layouts modification
 
     screen_layouts[screen_id] = {
         "name": screen_name,
@@ -272,7 +310,12 @@ def _add_new_screen(screen_id, screen_name):
     }
     active_widget_instances.clear()
     print(f"Cleared active_widget_instances due to adding screen: {screen_id}")
-    return _save_layouts_to_file()
+    
+    # Run the save operation in a new thread
+    save_thread = threading.Thread(target=_save_layouts_to_file_threaded)
+    save_thread.daemon = True
+    save_thread.start()
+    return True # Optimistic success
 
 def _remove_screen(screen_id_to_remove):
     """Removes a screen from global layouts, updates current_display_mode if needed, and saves."""
@@ -291,8 +334,11 @@ def _remove_screen(screen_id_to_remove):
     active_widget_instances.clear()
     print(f"Cleared active_widget_instances due to removing screen: {screen_id_to_remove}")
     
-    saved_to_file = _save_layouts_to_file()
-    return saved_to_file, removed_screen_name, display_mode_was_changed
+    # Run the save operation in a new thread
+    save_thread = threading.Thread(target=_save_layouts_to_file_threaded)
+    save_thread.daemon = True
+    save_thread.start()
+    return True, removed_screen_name, display_mode_was_changed # Optimistic success for save
 
 def _set_active_display_mode(mode_name):
     """Sets the current_display_mode if the mode_name is valid."""
@@ -307,10 +353,12 @@ def _set_matrix_logging_enabled_and_save(status: bool):
     global MATRIX_DATA_LOGGING_ENABLED
     MATRIX_DATA_LOGGING_ENABLED = status
     print(f"Matrix data route logging globally set to: {MATRIX_DATA_LOGGING_ENABLED}")
-    if _save_layouts_to_file():
-        return True
-    else:
-        return False
+    
+    # Run the save operation in a new thread
+    save_thread = threading.Thread(target=_save_layouts_to_file_threaded)
+    save_thread.daemon = True
+    save_thread.start()
+    return True # Optimistic success
 
 def _prepare_global_widget_context(current_time, current_screen_widget_configs):
     """Prepares the global context dictionary for widgets."""
@@ -348,25 +396,26 @@ def get_screen_layouts_route():
 
 @app.route('/api/save_screen_layouts', methods=['POST'])
 def save_screen_layouts_route():
-    # global screen_layouts, active_widget_instances # No longer directly manipulating globals here
     try:
         new_layouts = request.get_json()
         if not isinstance(new_layouts, dict):
             return jsonify(success=False, message="Invalid layout format: must be a dictionary."), 400
         
-        with data_lock: # Lock remains here to protect the overall operation triggered by the request
+        with data_lock: 
+            # _update_and_save_screen_layouts will be called, which now uses a thread for file I/O.
+            # The modification of global screen_layouts and active_widget_instances happens under this lock.
             saved = _update_and_save_screen_layouts(new_layouts)
         
-        if saved:
-            return jsonify(success=True, message="Screen layouts saved successfully.")
+        if saved: # This now reflects the start of the save, not its completion
+            return jsonify(success=True, message="Screen layouts update initiated and saving in background.")
         else:
-            return jsonify(success=False, message="Failed to save screen layouts to file."), 500
+            # This path might be less likely if _update_and_save_screen_layouts always returns True
+            return jsonify(success=False, message="Failed to initiate screen layout save."), 500
     except Exception as e:
         return jsonify(success=False, message=f"Error processing request: {e}"), 400
 
 @app.route('/api/add_screen', methods=['POST'])
 def add_screen_route():
-    # global screen_layouts, active_widget_instances # No longer directly manipulating globals here
     try:
         data = request.get_json()
         new_screen_id = data.get('screen_id')
@@ -378,22 +427,21 @@ def add_screen_route():
             return jsonify(success=False, message="Screen ID can only contain letters, numbers, underscores, and hyphens."), 400
         
         with data_lock:
-            if new_screen_id in screen_layouts: # Pre-check for existing ID before calling helper
+            if new_screen_id in screen_layouts: 
                 return jsonify(success=False, message=f"Screen ID '{new_screen_id}' already exists."), 400
             
+            # _add_new_screen now uses a thread for file I/O.
+            # screen_layouts and active_widget_instances are modified under this lock.
             saved = _add_new_screen(new_screen_id, new_screen_name)
 
-        if saved:
-            return jsonify(success=True, message=f"Screen '{new_screen_name}' added successfully.", new_screen_id=new_screen_id)
+        if saved: # Reflects initiation of save
+            return jsonify(success=True, message=f"Screen '{new_screen_name}' added, saving layouts in background.", new_screen_id=new_screen_id)
         else:
-            # Simplified rollback: if save failed, the in-memory change might persist until next load
-            # or we could attempt to remove it. For now, error is reported.
-            # A more robust rollback would explicitly remove new_screen_id from screen_layouts here if save failed.
-            with data_lock: # Ensure thread safety if we decide to revert the in-memory change
-                if new_screen_id in screen_layouts: # If it was added and save failed
-                    del screen_layouts[new_screen_id] # Revert in-memory addition
-                    print(f"Rolled back addition of screen '{new_screen_id}' due to save failure.")
-            return jsonify(success=False, message="Failed to save updated layouts to file after adding screen."), 500
+            # This part of the logic might need adjustment if _add_new_screen always returns True
+            # and relies on background thread for actual save outcome.
+            # For now, assuming 'saved' reflects successful initiation.
+            # A robust rollback for in-memory changes if background save fails would be more complex.
+            return jsonify(success=False, message="Failed to initiate screen add operation."), 500
     except Exception as e:
         return jsonify(success=False, message=f"Error adding screen: {e}"), 400
 
@@ -415,19 +463,22 @@ def remove_screen_route(screen_id_to_remove):
             original_screen_config = screen_layouts.get(screen_id_to_remove).copy()
             original_current_display_mode_snapshot = current_display_mode # Snapshot global before change by helper
 
-            saved, removed_name, mode_changed = _remove_screen(screen_id_to_remove)
+            # _remove_screen now uses a thread for file I/O.
+            # screen_layouts, active_widget_instances, and current_display_mode are modified under this lock.
+            save_initiated, removed_name, mode_changed = _remove_screen(screen_id_to_remove)
 
-        if saved:
+        if save_initiated: # Reflects initiation of save
             new_active_mode_val = None
             if mode_changed:
                 # current_display_mode (global) has been updated by _remove_screen to 'default'
                 new_active_mode_val = current_display_mode 
             
             return jsonify(success=True, 
-                           message=f"Screen '{removed_name}' removed successfully.", 
+                           message=f"Screen '{removed_name}' removed, saving layouts in background.", 
                            new_active_mode=new_active_mode_val)
         else:
-            # Attempt to roll back in-memory changes if save failed
+            # Rollback logic for in-memory changes if initiation fails (less likely with current optimistic return)
+            # If background save fails, a more complex callback or status check mechanism would be needed for rollback.
             with data_lock:
                 if original_screen_config:
                     screen_layouts[screen_id_to_remove] = original_screen_config # Restore deleted screen
@@ -437,9 +488,9 @@ def remove_screen_route(screen_id_to_remove):
                 if mode_changed: 
                     current_display_mode = original_current_display_mode_snapshot
                 
-                active_widget_instances.clear() # Keep it simple: clear instances on failed save too.
-                print(f"Rolled back in-memory changes for screen '{screen_id_to_remove}' due to save failure.")
-            return jsonify(success=False, message="Failed to save updated layouts to file after removing screen."), 500
+                # active_widget_instances.clear() # Already cleared by _remove_screen
+                print(f"Rollback of in-memory changes for screen '{screen_id_to_remove}' due to initiation failure.")
+            return jsonify(success=False, message="Failed to initiate screen remove operation."), 500
     except Exception as e:
         return jsonify(success=False, message=f"Error removing screen: {e}"), 400
 
@@ -627,34 +678,35 @@ def get_matrix_logging_status():
 
 @app.route('/api/set_matrix_logging_status', methods=['POST'])
 def set_matrix_logging_status():
-    # global MATRIX_DATA_LOGGING_ENABLED # This global is managed by the helper function
-    data = request.get_json()
-    if data is None or 'enabled' not in data or not isinstance(data['enabled'], bool):
-        return jsonify(success=False, message="Invalid request. 'enabled' (boolean) is required."), 400
-    
-    requested_status = data['enabled']
-    
-    # The data_lock is important here because _set_matrix_logging_enabled_and_save calls 
-    # _save_layouts_to_file, which reads screen_layouts (shared) and writes to the filesystem.
-    with data_lock: 
-        save_success = _set_matrix_logging_enabled_and_save(requested_status)
-            
-    if save_success:
-        # Return the current status of MATRIX_DATA_LOGGING_ENABLED, which the helper updated.
-        return jsonify(success=True, enabled=MATRIX_DATA_LOGGING_ENABLED)
-    else:
-        # If saving failed, the global MATRIX_DATA_LOGGING_ENABLED might have changed,
-        # but its persistence failed. The user gets an error. 
-        # The actual global MATRIX_DATA_LOGGING_ENABLED reflects the attempted state.
-        return jsonify(success=False, 
-                       message="Failed to save configuration after updating logging status.", 
-                       enabled=MATRIX_DATA_LOGGING_ENABLED), 500
+    try:
+        data = request.get_json()
+        status = data.get('enabled', False)
+        with data_lock:
+            # _set_matrix_logging_enabled_and_save now uses a thread for file I/O.
+            # MATRIX_DATA_LOGGING_ENABLED is modified under this lock.
+            if _set_matrix_logging_enabled_and_save(status):
+                return jsonify(success=True, message=f"Matrix data logging status update initiated, saving in background.")
+            else:
+                return jsonify(success=False, message="Failed to initiate matrix logging status update.")
+    except Exception as e:
+        return jsonify(success=False, message=f"Error setting matrix logging status: {str(e)}"), 400
 
 def periodic_display_updater():
     """Periodically calls update_display_content in a background thread."""
     print("Starting periodic display updater thread...")
     global current_display_mode, last_screen_change_time, last_debug_log_time
     
+    # Initialize offscreen_canvas for the hardware matrix if available
+    thread_local_offscreen_canvas = None
+    if hardware_matrix:
+        try:
+            thread_local_offscreen_canvas = hardware_matrix.CreateFrameCanvas()
+            print("INFO: Hardware matrix offscreen canvas created successfully for the updater thread.")
+        except Exception as e:
+            print(f"ERROR: Failed to create hardware matrix offscreen canvas in updater thread: {e}")
+            # If canvas creation fails, we won't be able to use the hardware matrix.
+            # The 'if hardware_matrix and thread_local_offscreen_canvas:' check later will handle this.
+
     last_loop_finish_time = time.monotonic()
     frame_count = 0
     skip_count = 0
@@ -721,6 +773,40 @@ def periodic_display_updater():
                 optimizer.start_timer("update_display_content")
                 update_display_content() 
                 update_time_ms = optimizer.end_timer("update_display_content")
+
+                # --- BEGIN NEW MATRIX HARDWARE UPDATE CODE ---
+                if hardware_matrix and thread_local_offscreen_canvas: # Check if matrix and its canvas were initialized successfully
+                    optimizer.start_timer("hardware_matrix_update")
+                    try:
+                        # Get the app's pixel buffer. 
+                        with data_lock:
+                            current_app_buffer = matrix_display.get_buffer()
+                        
+                        if current_app_buffer: # Ensure buffer is not None
+                            # REUSE thread_local_offscreen_canvas. 
+                            # Pixels are set directly, effectively clearing/overwriting previous frame content.
+                            for y, row in enumerate(current_app_buffer):
+                                if y >= MATRIX_HEIGHT: break # Boundary check
+                                for x, color_tuple in enumerate(row):
+                                    if x >= MATRIX_WIDTH: break # Boundary check
+                                    if color_tuple and len(color_tuple) == 3:
+                                        thread_local_offscreen_canvas.SetPixel(x, y, color_tuple[0], color_tuple[1], color_tuple[2])
+                                    else:
+                                        # Default to black if color_tuple is invalid or None
+                                        thread_local_offscreen_canvas.SetPixel(x, y, 0, 0, 0)
+                                        if color_tuple is not None:
+                                            print(f"DEBUG: Invalid color_tuple {color_tuple} at ({x},{y}). Defaulted to black.")
+                            
+                            # Swap the canvas to the physical display
+                            hardware_matrix.SwapOnVSync(thread_local_offscreen_canvas)
+                            # print(f"DEBUG: Hardware matrix updated at {time.monotonic():.2f}") # Optional: for frequent debug
+                    except Exception as e:
+                        print(f"ERROR: Failed to update hardware matrix: {e}")
+                        # import traceback
+                        # traceback.print_exc() # For more detailed error logging if needed
+                    finally:
+                        optimizer.end_timer("hardware_matrix_update")
+                # --- END NEW MATRIX HARDWARE UPDATE CODE ---
                 
                 # Decide if we should skip the next frame if this one was slow
                 if SKIP_FRAMES_ON_SLOW and update_time_ms > SKIP_FRAME_THRESHOLD:
@@ -842,7 +928,7 @@ if __name__ == '__main__':
     if pi_optimizer.is_raspberry_pi:
         print("Running on Raspberry Pi - applying specific optimizations")
         optimizer.update_settings({
-            "update_interval_multiplier": 2.0,
+            "update_interval_multiplier": 20.0,
             "minimize_logging": True
         })
     

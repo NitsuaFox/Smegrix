@@ -5,50 +5,82 @@
         "name": "Home Screen",
         "widgets": [
             {
-                "color": "#ff0000",
-                "display_format": "{temp}{unit_symbol}",
-                "enable_logging": true,
-                "enabled": true,
-                "font_size": "small",
                 "id": "home_temp",
-                "latitude": 54.61,
-                "location_name": "Billingham,UK",
-                "longitude": -1.29,
-                "time_display_format": "%H:%M",
                 "type": "weather",
-                "units": "metric",
-                "update_interval_minutes": 30,
-                "x": 27,
-                "y": 1
-            },
-            {
-                "analog_clock_size": "48x48",
-                "analog_hands_color": "#04ff00",
+                "x": 0,
+                "y": 0,
+                "enabled": true,
                 "color": "#ff0000",
-                "display_mode": "analog",
-                "enable_logging": false,
-                "enable_ntp": true,
-                "enabled": true,
-                "font_size": "xl",
-                "id": "time",
-                "ntp_resync_interval_hours": 4,
-                "ntp_server_address": "pool.ntp.org",
-                "ntp_timeout": 5,
-                "time_format": "%H:%M",
-                "type": "time",
-                "x": 8,
-                "y": 8
+                "enable_logging": true,
+                "location_name": "Billingham,UK",
+                "latitude": 54.61,
+                "longitude": -1.29,
+                "units": "metric",
+                "time_display_format": "%H:%M",
+                "display_format": "{temp}{unit_symbol}",
+                "update_interval_minutes": 30,
+                "font_size": "small"
             },
             {
-                "color": "#2bff00",
-                "date_format_type": "dd_mon",
-                "enable_logging": true,
-                "enabled": true,
-                "font_size": "small",
                 "id": "top_date",
                 "type": "date",
+                "x": 12,
+                "y": 0,
+                "enabled": true,
+                "color": "#2bff00",
+                "enable_logging": true,
+                "date_format_type": "dd_mon",
+                "font_size": "small"
+            },
+            {
+                "id": "timer2",
+                "type": "time",
                 "x": 40,
-                "y": 1
+                "y": 0,
+                "enabled": true,
+                "color": "#2bff00",
+                "enable_logging": false,
+                "display_mode": "analog",
+                "time_format": "%H:%M",
+                "font_size": "medium",
+                "analog_clock_size": "24x24",
+                "analog_hands_color": "#ff0000",
+                "enable_ntp": false,
+                "ntp_server_address": "pool.ntp.org",
+                "ntp_timeout": 5,
+                "ntp_resync_interval_hours": 4
+            },
+            {
+                "id": "news2",
+                "type": "news",
+                "x": 0,
+                "y": 59,
+                "enabled": true,
+                "color": "#11ff00",
+                "enable_logging": true,
+                "rss_url": "http://feeds.bbci.co.uk/news/rss.xml",
+                "update_interval_minutes": 5,
+                "num_headlines": 5,
+                "scroll_interval_ms": 90,
+                "font_size": "small"
+            },
+            {
+                "id": "time3",
+                "type": "time",
+                "x": 6,
+                "y": 6,
+                "enabled": true,
+                "color": "#ffea00",
+                "enable_logging": false,
+                "display_mode": "digital",
+                "time_format": "%H:%M",
+                "font_size": "medium",
+                "analog_clock_size": "24x24",
+                "analog_hands_color": "#ffffff",
+                "enable_ntp": false,
+                "ntp_server_address": "pool.ntp.org",
+                "ntp_timeout": 5,
+                "ntp_resync_interval_hours": 4
             }
         ]
     },
@@ -57,7 +89,7 @@
         "name": "Weather",
         "widgets": [
             {
-                "color": "#ffffff",
+                "color": "#00b3ff",
                 "display_format": "{temp}{unit_symbol}",
                 "enable_logging": true,
                 "enabled": true,
@@ -87,8 +119,8 @@
                 "type": "weather",
                 "units": "metric",
                 "update_interval_minutes": 30,
-                "x": 6,
-                "y": 32
+                "x": 36,
+                "y": 15
             }
         ]
     }

@@ -208,8 +208,11 @@ class Display:
         self.default_font_name = "5x7" # Keep 5x7 as the default if no font is specified
 
     def clear(self, bg_color=DEFAULT_BG_COLOR):
-        """Clears the pixel buffer (sets all pixels to bg_color)."""
-        self.pixel_buffer = [[bg_color for _ in range(self.width)] for _ in range(self.height)]
+        """Clears the pixel buffer by setting all existing pixels to bg_color."""
+        # Iterate through the existing buffer and update pixels in place
+        for r_idx in range(self.height): # Corrected variable name for clarity
+            for c_idx in range(self.width): # Corrected variable name for clarity
+                self.pixel_buffer[r_idx][c_idx] = bg_color
 
     def set_pixel(self, x, y, color_tuple):
         """
