@@ -21,7 +21,7 @@ class PerformanceOptimizer:
         self.settings = {
             "skip_frame_rendering": False,
             "reduce_update_frequency": False,
-            "update_interval_multiplier": 2.0,  # Double the interval between updates
+            "update_interval_multiplier": 20.0,  # MODIFIED - Increased interval
             "disable_animations": False,
             "minimize_logging": True,
             "log_settings_updates": False,  # Disable settings update logs

@@ -269,6 +269,7 @@ class TimeWidget(BaseWidget):
             if 0 <= int(center_y)+1 < self.analog_height and 0 <= int(center_x)+1 < self.analog_width:
                  pixel_map[int(center_y)+1][int(center_x)+1] = (50,50,50)
 
+            self._log("DEBUG", f"Analog map for {self.widget_id}: {self.analog_width}x{self.analog_height}, Color: {self.analog_hands_rgb}")
             return {
                 'type': 'pixel_map',
                 'width': self.analog_width,

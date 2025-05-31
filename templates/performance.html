@@ -259,8 +259,8 @@
                         </div>
                         <div class="setting-row">
                             <div>Update Interval Multiplier</div>
-                            <input type="range" id="update-interval-multiplier" min="1" max="5" step="0.5" value="2">
-                            <span id="multiplier-value">2.0</span>
+                            <input type="range" id="update-interval-multiplier" min="1" max="20" step="0.5" value="20">
+                            <span id="multiplier-value">20.0</span>
                         </div>
                     </div>
                     <div class="card-actions">
@@ -312,7 +312,7 @@
                 document.getElementById('minimize-logging').checked = settings.minimize_logging || false;
                 document.getElementById('log-settings-updates').checked = settings.log_settings_updates || false;
                 
-                const multiplier = settings.update_interval_multiplier || 2.0;
+                const multiplier = settings.update_interval_multiplier || 20.0;
                 document.getElementById('update-interval-multiplier').value = multiplier;
                 document.getElementById('multiplier-value').textContent = multiplier;
             })
